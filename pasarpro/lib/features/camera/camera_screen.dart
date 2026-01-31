@@ -1,15 +1,82 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/image_service.dart';
+import '../growth/image_processing_screen.dart';
 
-class CameraScreen extends StatelessWidget {
+class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
+
+  @override
+  State<CameraScreen> createState() => _CameraScreenState();
+}
+
+class _CameraScreenState extends State<CameraScreen> {
+  final ImageService _imageService = ImageService();
+  bool _isProcessing = false;
+
+  Future<void> _handleCameraCapture() async {
+    setState(() => _isProcessing = true);
+    
+    try {
+      final imageFile = await _imageService.capturePhoto();
+      
+      if (imageFile != null && mounted) {
+        // Navigate to processing screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ImageProcessingScreen(imageFile: imageFile),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Camera error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _handleGalleryPick() async {
+    setState(() => _isProcessing = true);
+    
+    try {
+      final imageFile = await _imageService.pickFromGallery();
+      
+      if (imageFile != null && mounted) {
+        // Navigate to processing screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ImageProcessingScreen(imageFile: imageFile),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gallery error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.onSurface,
       appBar: AppBar(
-        title: const Text('Magic Wand'),
+        title: const Text('AI Food Stylist'),
         backgroundColor: AppColors.onSurface,
       ),
       body: Column(
@@ -23,7 +90,6 @@ class CameraScreen extends StatelessWidget {
                 border: Border.all(
                   color: AppColors.primary.withOpacity(0.5),
                   width: 2,
-                  style: BorderStyle.solid,
                 ),
               ),
               child: Center(
@@ -32,22 +98,29 @@ class CameraScreen extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.camera_alt_rounded,
-                      size: 80,
+                      size: 100,
                       color: AppColors.primary.withOpacity(0.7),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     Text(
-                      'Camera Preview',
+                      'Transform Your Food Photos',
                       style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 20,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Camera integration coming soon',
-                      style: TextStyle(fontSize: 14, color: Colors.white54),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        'Take a photo or choose from gallery to enhance with AI',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -76,33 +149,33 @@ class CameraScreen extends StatelessWidget {
                 _buildFeatureRow(
                   icon: Icons.auto_fix_high_rounded,
                   title: 'AI Food Stylist',
-                  subtitle: 'Nano Banana Pro fixes background & lighting',
+                  subtitle: 'Clean background & enhance lighting',
                 ),
                 const SizedBox(height: 12),
                 _buildFeatureRow(
-                  icon: Icons.videocam_rounded,
-                  title: 'Instant Viral Reels',
-                  subtitle: 'Veo turns photos into 5-sec videos',
+                  icon: Icons.translate_rounded,
+                  title: 'Multi-Language Captions',
+                  subtitle: 'English, Malay, Mandarin + hashtags',
                 ),
                 const SizedBox(height: 12),
                 _buildFeatureRow(
-                  icon: Icons.article_rounded,
-                  title: 'The Hype Man',
-                  subtitle: 'Gemini 3 Pro - 3 language captions',
+                  icon: Icons.analytics_rounded,
+                  title: 'Food Recognition',
+                  subtitle: 'AI identifies dish, cuisine, ingredients',
                 ),
                 const SizedBox(height: 24),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Gallery picker - Coming soon!'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.photo_library_rounded),
+                        onPressed: _isProcessing ? null : _handleGalleryPick,
+                        icon: _isProcessing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.photo_library_rounded),
                         label: const Text('Choose Photo'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primary,
@@ -117,14 +190,17 @@ class CameraScreen extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Camera capture - Coming soon!'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.camera_alt_rounded),
+                        onPressed: _isProcessing ? null : _handleCameraCapture,
+                        icon: _isProcessing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.camera_alt_rounded),
                         label: const Text('Take Photo'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,

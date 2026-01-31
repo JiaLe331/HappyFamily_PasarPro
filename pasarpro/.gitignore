@@ -49,5 +49,16 @@ app.*.map.json
 .env.*
 !.env.example
 
+# Generated plugin registration files (platform-specific)
+**/generated_plugin_registrant.dart
+**/GeneratedPluginRegistrant.swift
+**/generated_plugin_registrant.cc
+**/generated_plugins.cmake
+**/generated_plugin_registrant.h
+
+# Pubspec lock file (can be regenerated)
+pubspec.lock
+
 # Optional: uncomment to ignore Flutter SDK version file
 # .metadata
+
