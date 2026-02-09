@@ -1,47 +1,34 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
-import '../../services/gemini_service.dart';
-import '../../services/image_service.dart';
-import '../../services/database_service.dart';
 import '../../models/saved_generation.dart';
 
-class CaptionResultScreen extends StatefulWidget {
-  final File originalImage;
-  final Uint8List? enhancedImageBytes;
-  final FoodAnalysis foodAnalysis;
-  final CaptionSet captions;
+class GenerationDetailScreen extends StatefulWidget {
+  final SavedGeneration generation;
 
-  const CaptionResultScreen({
+  const GenerationDetailScreen({
     super.key,
-    required this.originalImage,
-    this.enhancedImageBytes,
-    required this.foodAnalysis,
-    required this.captions,
+    required this.generation,
   });
 
   @override
-  State<CaptionResultScreen> createState() => _CaptionResultScreenState();
+  State<GenerationDetailScreen> createState() => _GenerationDetailScreenState();
 }
 
-class _CaptionResultScreenState extends State<CaptionResultScreen>
+class _GenerationDetailScreenState extends State<GenerationDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _showEnhanced = true;
-  final ImageService _imageService = ImageService();
-  final DatabaseService _databaseService = DatabaseService();
-  bool _isSaved = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _saveToDatabase();
+    // Show enhanced by default if available
+    _showEnhanced = widget.generation.enhancedImagePath != null;
   }
 
   @override
@@ -53,19 +40,19 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
   String _getCurrentCaption() {
     switch (_tabController.index) {
       case 0:
-        return widget.captions.english;
+        return widget.generation.captionEnglish;
       case 1:
-        return widget.captions.malay;
+        return widget.generation.captionMalay;
       case 2:
-        return widget.captions.mandarin;
+        return widget.generation.captionMandarin;
       default:
-        return widget.captions.english;
+        return widget.generation.captionEnglish;
     }
   }
 
   String _getFullCaption() {
     final caption = _getCurrentCaption();
-    final hashtags = widget.captions.hashtags.join(' ');
+    final hashtags = widget.generation.hashtags.join(' ');
     return '$caption\n\n$hashtags';
   }
 
@@ -83,110 +70,48 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
     await Share.share(_getFullCaption());
   }
 
-  Future<void> _saveImage() async {
-    final filename = 'pasarpro_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final imageToSave = _showEnhanced && widget.enhancedImageBytes != null
-        ? widget.enhancedImageBytes!
-        : await widget.originalImage.readAsBytes();
-
-    // For demo, just show success message
-    // In production, use image_gallery_saver package
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Image saved as $filename'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// Save generation to database automatically
-  Future<void> _saveToDatabase() async {
-    if (_isSaved) return;
-    
-    try {
-      // Get app documents directory
-      final appDir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory(path.join(appDir.path, 'images'));
-      if (!await imagesDir.exists()) {
-        await imagesDir.create(recursive: true);
-      }
-      
-      // Copy original image to permanent storage
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalImagePath = path.join(imagesDir.path, 'original_$timestamp.jpg');
-      await widget.originalImage.copy(originalImagePath);
-      
-      // Save enhanced image if available
-      String? enhancedImagePath;
-      if (widget.enhancedImageBytes != null) {
-        enhancedImagePath = path.join(imagesDir.path, 'enhanced_$timestamp.jpg');
-        final enhancedFile = File(enhancedImagePath);
-        await enhancedFile.writeAsBytes(widget.enhancedImageBytes!);
-      }
-      
-      // Create SavedGeneration object
-      final generation = SavedGeneration(
-        foodName: widget.foodAnalysis.foodName,
-        cuisine: widget.foodAnalysis.cuisine,
-        description: widget.foodAnalysis.description,
-        ingredients: widget.foodAnalysis.ingredients,
-        captionEnglish: widget.captions.english,
-        captionMalay: widget.captions.malay,
-        captionMandarin: widget.captions.mandarin,
-        hashtags: widget.captions.hashtags,
-        originalImagePath: originalImagePath,
-        enhancedImagePath: enhancedImagePath,
-        createdAt: DateTime.now(),
-      );
-      
-      // Save to database
-      await _databaseService.saveGeneration(generation);
-      setState(() => _isSaved = true);
-      
-    } catch (e) {
-      // Silent fail - don't interrupt user experience
-      print('[ERROR] Failed to save to database: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final dateFormat = DateFormat('MMMM d, y \'at\' h:mm a');
+    final imageFile = File(
+      _showEnhanced && widget.generation.enhancedImagePath != null
+          ? widget.generation.enhancedImagePath!
+          : widget.generation.originalImagePath,
+    );
+
     return Scaffold(
       backgroundColor: AppColors.onSurface,
       appBar: AppBar(
-        title: const Text('Results'),
+        title: const Text('Saved Generation'),
         backgroundColor: AppColors.onSurface,
         actions: [
           IconButton(
-            icon: const Icon(Icons.download_rounded),
-            onPressed: _saveImage,
-            tooltip: 'Save Image',
+            icon: const Icon(Icons.share_rounded),
+            onPressed: _shareCaption,
+            tooltip: 'Share',
           ),
         ],
       ),
       body: Column(
         children: [
-          // Image comparison
+          // Image display
           Expanded(
             flex: 3,
             child: Stack(
               children: [
-                // Image display
                 Container(
                   margin: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     image: DecorationImage(
-                      image: _showEnhanced && widget.enhancedImageBytes != null
-                          ? MemoryImage(widget.enhancedImageBytes!)
-                          : FileImage(widget.originalImage) as ImageProvider,
+                      image: FileImage(imageFile),
                       fit: BoxFit.cover,
                     ),
                   ),
                 ),
                 
-                // Toggle button (only show if enhancement succeeded)
-                if (widget.enhancedImageBytes != null)
+                // Toggle button (only show if enhancement exists)
+                if (widget.generation.enhancedImagePath != null)
                   Positioned(
                     top: 24,
                     right: 24,
@@ -231,7 +156,7 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.foodAnalysis.foodName,
+                              widget.generation.foodName,
                               style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
@@ -240,11 +165,19 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              widget.foodAnalysis.cuisine,
+                              widget.generation.cuisine,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              dateFormat.format(widget.generation.createdAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -317,7 +250,7 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: widget.captions.hashtags
+                            children: widget.generation.hashtags
                                 .map((tag) => Chip(
                                       label: Text(
                                         tag,
