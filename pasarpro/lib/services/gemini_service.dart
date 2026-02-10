@@ -101,24 +101,30 @@ Transform this hawker stall food photo into professional food photography:
         ])
       ];
       
+      print('[DEBUG] Calling gemini-2.5-flash-image for enhancement...');
       final response = await _imageModel.generateContent(content);
+      print('[DEBUG] Response received. Candidates: ${response.candidates.length}');
       
       // Extract image data from response
       if (response.candidates.isNotEmpty) {
         final candidate = response.candidates.first;
+        print('[DEBUG] Parts in response: ${candidate.content.parts.length}');
         if (candidate.content.parts.isNotEmpty) {
           for (final part in candidate.content.parts) {
+            print('[DEBUG] Part type: ${part.runtimeType}');
             if (part is DataPart) {
+              print('[DEBUG] Found DataPart with ${part.bytes.length} bytes');
               return part.bytes;
             }
           }
         }
       }
       
+      print('[DEBUG] No image data found in response');
       return null;
       
     } catch (e) {
-      // Image enhancement failed, return null
+      print('[ERROR] Image enhancement failed: $e');
       return null;
     }
   }
