@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "735607806056",
+    "project_id": "pasarpro-4e996",
+    "storage_bucket": "pasarpro-4e996.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:735607806056:android:f4b1671fad7068968483dd",
+        "android_client_info": {
+          "package_name": "com.example.pasarpro"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "735607806056-clh3btancaid09tdhqeojcnf62nff6u1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLlc2mS45NwyQuNE7FM3-Hr5B7aiuFMD0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "735607806056-clh3btancaid09tdhqeojcnf62nff6u1.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "735607806056-bhskud06otg4dnn610j8u9o8bt3k1gil.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pasarpro"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

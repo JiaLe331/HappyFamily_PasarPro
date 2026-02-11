@@ -53,8 +53,8 @@ app.*.map.json
 **/generated_plugin_registrant.dart
 **/GeneratedPluginRegistrant.swift
 **/generated_plugin_registrant.cc
-**/generated_plugins.cmake
 **/generated_plugin_registrant.h
+**/generated_plugins.cmake
 
 # Pubspec lock file (can be regenerated)
 pubspec.lock
