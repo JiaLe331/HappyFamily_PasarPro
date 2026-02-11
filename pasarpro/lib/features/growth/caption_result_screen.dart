@@ -9,6 +9,7 @@ import '../../core/constants/app_colors.dart';
 import '../../services/gemini_service.dart';
 import '../../services/image_service.dart';
 import '../../services/database_service.dart';
+import '../../services/instagram_service.dart';
 import '../../models/saved_generation.dart';
 
 class CaptionResultScreen extends StatefulWidget {
@@ -35,7 +36,9 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
   bool _showEnhanced = true;
   final ImageService _imageService = ImageService();
   final DatabaseService _databaseService = DatabaseService();
+  final InstagramService _instagramService = InstagramService();
   bool _isSaved = false;
+  bool _isPostingToInstagram = false;
 
   @override
   void initState() {
@@ -147,6 +150,227 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
       // Silent fail - don't interrupt user experience
       print('[ERROR] Failed to save to database: $e');
     }
+  }
+
+  /// Post to Instagram via n8n workflow with progress dialog
+  Future<void> _postToInstagram() async {
+    setState(() => _isPostingToInstagram = true);
+    
+    // Initialize current step
+    _currentStep = PostingStep.uploadingImage;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Store the dialog state setter so we can update from outside
+            _dialogSetState = setDialogState;
+            
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 8),
+                  // Instagram icon
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFFF58529),
+                          Color(0xFFDD2A7B),
+                          Color(0xFF8134AF),
+                          Color(0xFF515BD4),
+                        ],
+                        begin: Alignment.bottomLeft,
+                        end: Alignment.topRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(Icons.camera_alt, color: Colors.white, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  // Progress title
+                  Text(
+                    _currentStep == PostingStep.success
+                        ? '🎉 Posted!'
+                        : _currentStep == PostingStep.failed
+                            ? '❌ Failed'
+                            : 'Posting to Instagram',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: _currentStep.progress,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        _currentStep == PostingStep.failed
+                            ? Colors.red
+                            : _currentStep == PostingStep.success
+                                ? Colors.green
+                                : AppColors.primary,
+                      ),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Step indicators
+                  _buildStepRow(PostingStep.uploadingImage, Icons.cloud_upload_outlined),
+                  const SizedBox(height: 12),
+                  _buildStepRow(PostingStep.sendingToN8n, Icons.sync),
+                  const SizedBox(height: 12),
+                  _buildStepRow(PostingStep.postingToInstagram, Icons.send_rounded),
+                  const SizedBox(height: 12),
+                  _buildStepRow(PostingStep.success, Icons.check_circle_outline),
+                  const SizedBox(height: 16),
+                  // Description text
+                  Text(
+                    _currentStep.description,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    
+    try {
+      // Use enhanced image if available, otherwise original
+      final imageToPost = _showEnhanced && widget.enhancedImageBytes != null
+          ? await _createTempFile(widget.enhancedImageBytes!)
+          : widget.originalImage;
+      
+      final success = await _instagramService.postToInstagram(
+        imageFile: imageToPost,
+        caption: _getFullCaption(),
+        onProgress: (step) {
+          if (mounted && _dialogSetState != null) {
+            _dialogSetState!(() {
+              _currentStep = step;
+            });
+          }
+        },
+      );
+      
+      // Wait for success animation to show, then dismiss
+      if (mounted) {
+        // Give user time to see the success/failure state
+        await Future.delayed(Duration(seconds: 2));
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    } catch (e) {
+      print('[ERROR] Instagram post error: $e');
+      if (mounted) {
+        if (_dialogSetState != null) {
+          _dialogSetState!(() {
+            _currentStep = PostingStep.failed;
+          });
+        }
+        await Future.delayed(Duration(seconds: 2));
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPostingToInstagram = false);
+      }
+    }
+  }
+
+  // Dialog state management
+  void Function(void Function())? _dialogSetState;
+  PostingStep _currentStep = PostingStep.uploadingImage;
+
+  /// Build a single step row for the progress dialog
+  Widget _buildStepRow(PostingStep step, IconData icon) {
+    final isActive = _currentStep == step;
+    final isCompleted = _currentStep.progress > step.progress;
+    final isFailed = _currentStep == PostingStep.failed;
+    
+    Color color;
+    if (isFailed) {
+      color = Colors.grey.shade400;
+    } else if (isCompleted) {
+      color = Colors.green;
+    } else if (isActive) {
+      color = AppColors.primary;
+    } else {
+      color = Colors.grey.shade300;
+    }
+
+    return Row(
+      children: [
+        // Step icon
+        AnimatedContainer(
+          duration: Duration(milliseconds: 300),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isCompleted 
+                ? Colors.green.withOpacity(0.1) 
+                : isActive 
+                    ? AppColors.primary.withOpacity(0.1) 
+                    : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: isCompleted
+              ? Icon(Icons.check, color: Colors.green, size: 18)
+              : Icon(icon, color: color, size: 18),
+        ),
+        SizedBox(width: 12),
+        // Step label
+        Expanded(
+          child: Text(
+            step.label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              color: isActive || isCompleted 
+                  ? Colors.black87 
+                  : Colors.grey.shade400,
+            ),
+          ),
+        ),
+        // Loading indicator for active step
+        if (isActive && !isFailed && step != PostingStep.success)
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Create temp file from bytes (for enhanced image)
+  Future<File> _createTempFile(Uint8List bytes) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File('${tempDir.path}/temp_instagram_post.jpg');
+    await tempFile.writeAsBytes(bytes);
+    return tempFile;
   }
 
   @override
@@ -344,32 +568,64 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
                   const SizedBox(height: 16),
                   
                   // Action buttons
-                  Row(
+                  Column(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _copyToClipboard,
-                          icon: const Icon(Icons.copy_rounded, size: 18),
-                          label: const Text('Copy'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primary,
-                            side: BorderSide(color: AppColors.primary),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
+                      // Instagram Post Button (Primary action)
+                      SizedBox(
+                        width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _shareCaption,
-                          icon: const Icon(Icons.share_rounded, size: 18),
-                          label: const Text('Share'),
+                          onPressed: _isPostingToInstagram ? null : _postToInstagram,
+                          icon: _isPostingToInstagram
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : Icon(Icons.camera_alt_rounded, size: 18),
+                          label: Text(_isPostingToInstagram ? 'Posting...' : 'Post to Instagram'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Copy and Share buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _copyToClipboard,
+                              icon: const Icon(Icons.copy_rounded, size: 18),
+                              label: const Text('Copy'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: BorderSide(color: AppColors.primary),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _shareCaption,
+                              icon: const Icon(Icons.share_rounded, size: 18),
+                              label: const Text('Share'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: BorderSide(color: AppColors.primary),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
