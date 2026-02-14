@@ -1,38 +1,85 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GeminiService {
-  late final GenerativeModel _visionModel;
-  late final GenerativeModel _imageModel;
-  late final GenerativeModel _textModel;
+  late final String _apiKey;
+  late final String _projectId;
+  late final String _location;
+  late final String _baseUrl;
   
   GeminiService() {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    _apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    _projectId = dotenv.env['PROJECT_ID'] ?? '';
+    _location = dotenv.env['REGION'] ?? '';
+    _baseUrl = dotenv.env['BASE_URL'] ?? '';
     
-    if (apiKey.isEmpty) {
+    if (_apiKey.isEmpty) {
       throw Exception('GEMINI_API_KEY not found in .env file');
     }
-    
-    // Gemini 2.5 Flash for vision (food analysis)
-    _visionModel = GenerativeModel(
-      model: 'gemini-2.5-flash',
-      apiKey: apiKey,
+  }
+  
+  /// Helper method to encode image to base64
+  String _encodeImage(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+  
+  /// Call Vertex AI generative API
+  Future<String> _callVertexAI(
+    String model,
+    String prompt,
+    Uint8List? imageBytes, {
+    String mimeType = 'image/jpeg',
+  }) async {
+    final url = Uri(
+      scheme: 'https',
+      host: _baseUrl,
+      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$model:generateContent',
+      queryParameters: {'key': _apiKey},
     );
-    
-    // Gemini 2.5 Flash Image (Nano Banana) for image enhancement
-    _imageModel = GenerativeModel(
-      model: 'gemini-2.5-flash-image',
-      apiKey: apiKey,
+
+    final requestBody = {
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': prompt},
+            if (imageBytes != null)
+              {
+                'inline_data': {
+                  'mime_type': mimeType,
+                  'data': _encodeImage(imageBytes),
+                }
+              }
+          ],
+        }
+      ],
+      'generationConfig': {
+        'temperature': 1.0,
+        'topP': 0.95,
+      },
+    };
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
     );
+
+    if (response.statusCode != 200) {
+      throw Exception('Vertex AI API error: ${response.statusCode} - ${response.body}');
+    }
+
+    final responseData = jsonDecode(response.body);
+    final content = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'] as String?;
     
-    // Gemini 2.5 Flash for text generation (captions)
-    _textModel = GenerativeModel(
-      model: 'gemini-2.5-flash',
-      apiKey: apiKey,
-    );
+    if (content == null) {
+      throw Exception('No text content in Vertex AI response');
+    }
+
+    return content;
   }
   
   /// Analyze food image to identify dish name, cuisine, and ingredients
@@ -56,15 +103,7 @@ Respond in JSON format:
 }
 ''';
       
-      final content = [
-        Content.multi([
-          TextPart(prompt),
-          DataPart('image/jpeg', imageBytes),
-        ])
-      ];
-      
-      final response = await _visionModel.generateContent(content);
-      final text = response.text ?? '';
+      final text = await _callVertexAI('gemini-2.5-flash', prompt, imageBytes);
       
       // Extract JSON from response (handle markdown code blocks)
       final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
@@ -80,53 +119,131 @@ Respond in JSON format:
     }
   }
   
-  /// Enhance food image using Nano Banana (background cleanup, lighting)
-  Future<Uint8List?> enhanceImage(File imageFile, {String? customPrompt}) async {
-    try {
+  /// Enhance food image using Gemini 2.5 Flash Image (Nano Banana)
+  /// Returns a list of enhanced image variations (generates 3 in one call)
+  Future<List<Uint8List>> enhanceImage(File imageFile, {String? customPrompt}) async {
+    try 
+    {
       final imageBytes = await imageFile.readAsBytes();
       
-      final prompt = customPrompt ?? '''
-Transform this hawker stall food photo into professional food photography:
-- Clean up cluttered background and replace with simple, clean surface
-- Enhance lighting to make the food look appetizing and vibrant
-- Improve colors to look natural and mouth-watering
-- Keep the authentic Malaysian food appearance
-- Maintain the original food composition and angle
+      final prompt = customPrompt ?? 
+'''
+Transform this image and create 3 separate images based on each instruction:
+Image 1 (Clean and Bright Style):
+- Clean background with white/light surface
+- Bright, natural lighting
+- Vibrant, appetizing colors
+
+Image 2 (Warm and Cozy Style):
+- Wooden table background
+- Warm, soft lighting with golden tones
+- Natural, home-cooked feel
+        
+Image 3 (Modern and Minimalist Style):
+- Dark background for contrast
+- Dramatic lighting highlighting the food
+- Professional restaurant presentation
+
+All 3 images must:
+- Keep authentic Malaysian food appearance
+- Maintain original food composition and angle (make sure the entire dish is visible)
+- Make suitable for social media posting
 ''';
-      
-      final content = [
-        Content.multi([
-          TextPart(prompt),
-          DataPart('image/jpeg', imageBytes),
-        ])
-      ];
-      
-      print('[DEBUG] Calling gemini-2.5-flash-image for enhancement...');
-      final response = await _imageModel.generateContent(content);
-      print('[DEBUG] Response received. Candidates: ${response.candidates.length}');
-      
-      // Extract image data from response
-      if (response.candidates.isNotEmpty) {
-        final candidate = response.candidates.first;
-        print('[DEBUG] Parts in response: ${candidate.content.parts.length}');
-        if (candidate.content.parts.isNotEmpty) {
-          for (final part in candidate.content.parts) {
-            print('[DEBUG] Part type: ${part.runtimeType}');
-            if (part is DataPart) {
-              print('[DEBUG] Found DataPart with ${part.bytes.length} bytes');
-              return part.bytes;
+
+      final enhancedImages = await _callImageEnhanceAI(imageBytes, prompt);
+      return enhancedImages;
+    }
+    catch (e)
+    {
+      throw Exception('Image enhancement failed: $e');
+    }
+  }
+
+  Future<List<Uint8List>> _callImageEnhanceAI(Uint8List imageBytes, String prompt) async
+  {
+    final url = Uri
+    (
+      scheme: 'https',
+      host: _baseUrl,
+      // path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.0-flash-exp:generateContent',
+      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.5-flash-image:generateContent',
+      queryParameters: {'key': _apiKey}
+    );
+    
+    final requestBody =
+    {
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': prompt},
+            {
+              'inline_data': {
+                'mime_type': 'image/jpeg',
+                'data': _encodeImage(imageBytes),
+              }
             }
+          ],
+        }
+      ],
+      'generationConfig': {
+        'temperature': 1.0,
+        'topP': 0.95,
+        'responseModalities': ['text','image'],
+        "imageConfig": {
+          "aspectRatio": "4:5",
+        },
+      },
+    };
+
+    print('[Enhancing Image] Sending request...');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+    
+    print('[Enhancing Image] Response status: ${response.statusCode}');
+    print('[Enhancing Image] Response body: ${response.body}');
+    
+    if (response.statusCode != 200) 
+    {
+      print('[Enhancing Image] Error response: ${response.body}');
+      throw Exception('Enhancing Image API error: ${response.statusCode} - ${response.body}');
+    }
+
+    final responseData = jsonDecode(response.body);
+    final candidates = responseData['candidates'] as List?;
+    
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('No candidates in response');
+    }
+    
+    final List<Uint8List> enhancedImages = [];
+    
+    for (final candidate in candidates) {
+      final parts = candidate?['content']?['parts'] as List?;
+      if (parts == null || parts.isEmpty) continue;
+      
+      for (final part in parts) {
+        if (part is Map && part.containsKey('inlineData')) {
+          final inlineData = part['inlineData'] as Map;
+          final base64Image = inlineData['data'] as String?;
+          
+          if (base64Image != null) {
+            enhancedImages.add(base64Decode(base64Image));
           }
         }
       }
-      
-      print('[DEBUG] No image data found in response');
-      return null;
-      
-    } catch (e) {
-      print('[ERROR] Image enhancement failed: $e');
-      return null;
     }
+
+    print('[Enhancing Image] Extracted ${enhancedImages.length} images.');
+    if (enhancedImages.isEmpty) {
+      throw Exception('No image data in response');
+    }
+    
+    return enhancedImages;
   }
   
   /// Generate multi-language captions with hashtags
@@ -153,8 +270,7 @@ Respond in JSON format:
 }
 ''';
       
-      final response = await _textModel.generateContent([Content.text(prompt)]);
-      final text = response.text ?? '';
+      final text = await _callVertexAI('gemini-2.5-flash', prompt, null);
       
       // Extract JSON from response
       final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);

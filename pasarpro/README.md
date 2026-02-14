@@ -53,9 +53,10 @@ PasarPro is an AI-powered ecosystem designed to bridge the digital divide for Ma
    - Image upload to Firebase Storage
 
 3. **AI Integration (Module A)**
-   - Gemini API for caption generation (3 languages)
-   - Image enhancement with Vertex AI (Nano Banana Pro)
-   - Video generation with Veo
+   - Food analysation with Gemini 2.5 Flash
+   - Gemini 2.5 Flash for caption generation (3 languages)
+   - Image enhancement with Gemini 2.5 Flash Image (Nano Banana)
+   - Video generation with Veo 3.1 Fast 
 
 4. **Additional Modules**
    - Module B: Pasar-Ops (Receipt OCR, P&L dashboard)

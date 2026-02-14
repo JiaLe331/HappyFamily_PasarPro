@@ -188,7 +188,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Powered by: Gemini 3 Pro, Nano Banana, Veo, Firebase & Google Maps',
+                  'Powered by: Gemini, Nano Banana, Veo, Firebase & Google Maps',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.primary,

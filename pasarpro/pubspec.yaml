@@ -41,9 +41,6 @@ dependencies:
   image: ^4.3.0
   path_provider: ^2.1.5
   
-  # Google AI
-  google_generative_ai: ^0.4.6
-  
   # Utilities
   http: ^1.2.2
   share_plus: ^10.1.4
