@@ -13,7 +13,7 @@ import '../../models/saved_generation.dart';
 
 class CaptionResultScreen extends StatefulWidget {
   final File originalImage;
-  final Uint8List? enhancedImageBytes;
+  final List<Uint8List>? enhancedImageBytes;
   final FoodAnalysis foodAnalysis;
   final CaptionSet captions;
 
@@ -32,7 +32,7 @@ class CaptionResultScreen extends StatefulWidget {
 class _CaptionResultScreenState extends State<CaptionResultScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _showEnhanced = true;
+  int _selectedImageIndex = 0; // 0 = original, 1-3 = enhanced variations
   final ImageService _imageService = ImageService();
   final DatabaseService _databaseService = DatabaseService();
   bool _isSaved = false;
@@ -85,8 +85,10 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
 
   Future<void> _saveImage() async {
     final filename = 'pasarpro_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final imageToSave = _showEnhanced && widget.enhancedImageBytes != null
-        ? widget.enhancedImageBytes!
+    final imageToSave = _selectedImageIndex > 0 && 
+                        widget.enhancedImageBytes != null &&
+                        _selectedImageIndex <= widget.enhancedImageBytes!.length
+        ? widget.enhancedImageBytes![_selectedImageIndex - 1]
         : await widget.originalImage.readAsBytes();
 
     // For demo, just show success message
@@ -118,10 +120,11 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
       
       // Save enhanced image if available
       String? enhancedImagePath;
-      if (widget.enhancedImageBytes != null) {
+      if (widget.enhancedImageBytes != null && widget.enhancedImageBytes!.isNotEmpty) {
         enhancedImagePath = path.join(imagesDir.path, 'enhanced_$timestamp.jpg');
         final enhancedFile = File(enhancedImagePath);
-        await enhancedFile.writeAsBytes(widget.enhancedImageBytes!);
+        // Save first enhanced variation by default
+        await enhancedFile.writeAsBytes(widget.enhancedImageBytes!.first);
       }
       
       // Create SavedGeneration object
@@ -166,47 +169,50 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
       ),
       body: Column(
         children: [
-          // Image comparison
+          // Image display
           Expanded(
             flex: 3,
-            child: Stack(
-              children: [
-                // Image display
-                Container(
-                  margin: const EdgeInsets.all(16),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                image: DecorationImage(
+                  image: _selectedImageIndex > 0 && 
+                         widget.enhancedImageBytes != null &&
+                         _selectedImageIndex <= widget.enhancedImageBytes!.length
+                      ? MemoryImage(widget.enhancedImageBytes![_selectedImageIndex - 1])
+                      : FileImage(widget.originalImage) as ImageProvider,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          
+          // Toggle buttons (only show if enhancement succeeded)
+          if (widget.enhancedImageBytes != null && widget.enhancedImageBytes!.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Center(
+                child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    image: DecorationImage(
-                      image: _showEnhanced && widget.enhancedImageBytes != null
-                          ? MemoryImage(widget.enhancedImageBytes!)
-                          : FileImage(widget.originalImage) as ImageProvider,
-                      fit: BoxFit.cover,
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToggleButton('Original', 0),
+                        for (int i = 0; i < widget.enhancedImageBytes!.length; i++)
+                          _buildToggleButton('Enhanced ${i + 1}', i + 1),
+                      ],
                     ),
                   ),
                 ),
-                
-                // Toggle button (only show if enhancement succeeded)
-                if (widget.enhancedImageBytes != null)
-                  Positioned(
-                    top: 24,
-                    right: 24,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildToggleButton('Original', !_showEnhanced),
-                          _buildToggleButton('Enhanced', _showEnhanced),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
-          ),
           
           // Food info & captions
           Expanded(
@@ -382,15 +388,16 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
     );
   }
 
-  Widget _buildToggleButton(String label, bool isActive) {
+  Widget _buildToggleButton(String label, int index) {
+    final isActive = _selectedImageIndex == index;
     return GestureDetector(
       onTap: () {
         setState(() {
-          _showEnhanced = label == 'Enhanced';
+          _selectedImageIndex = index;
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(20),

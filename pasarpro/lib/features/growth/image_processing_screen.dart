@@ -29,7 +29,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
   
   // Results
   FoodAnalysis? _foodAnalysis;
-  Uint8List? _enhancedImageBytes;
+  List<Uint8List>? _enhancedImageBytes;
   CaptionSet? _captions;
   String? _error;
 

@@ -1,0 +1,16 @@
+# For codespaces (Adrianna using)
+## Web Debugging
+`flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080`
+
+## ADB Debbugging
+### Setting up tailscale (mesh vpn for wireless ADB debugging)
+`sudo tailscale up`
+
+### Setting up ADB and connect
+```bash
+# Pair device first
+adb pair <TAILSCALE_IP>:<PORT>
+
+# Then connect
+adb connect <TAILSCALE_IP>:<NEW_PORT>
+```
