@@ -25,5 +25,7 @@
         "chat.editor.fontSize": 10
       }
     }
-  }
+  },
+  // Disable GPG signing for git
+  "postCreateCommand": "git config --global commit.gpgsign false && git config --global tag.gpgsign false"
 }
