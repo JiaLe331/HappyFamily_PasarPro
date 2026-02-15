@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
-import '../../services/gemini_service.dart';
+import '../../services/ai_service.dart';
 import '../../services/image_service.dart';
-import 'caption_result_screen.dart';
+import '../gallery/generation_detail_screen.dart';
 
 class ImageProcessingScreen extends StatefulWidget {
   final File imageFile;
@@ -58,7 +58,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => CaptionResultScreen(
+          builder: (context) => GenerationDetailScreen(
             originalImage: widget.imageFile,
             enhancedImageBytes: _enhancedImageBytes,
             foodAnalysis: _foodAnalysis!,

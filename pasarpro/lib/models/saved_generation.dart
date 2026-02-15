@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 /// Model for a saved AI generation (photo + captions)
 class SavedGeneration {
   final int? id;
@@ -12,7 +10,7 @@ class SavedGeneration {
   final String captionMandarin;
   final List<String> hashtags;
   final String originalImagePath;
-  final String? enhancedImagePath;
+  final List<String> enhancedImagePaths;
   final DateTime createdAt;
   
   SavedGeneration({
@@ -26,7 +24,7 @@ class SavedGeneration {
     required this.captionMandarin,
     required this.hashtags,
     required this.originalImagePath,
-    this.enhancedImagePath,
+    this.enhancedImagePaths = const [],
     required this.createdAt,
   });
   
@@ -43,7 +41,7 @@ class SavedGeneration {
       'captionMandarin': captionMandarin,
       'hashtags': hashtags.join('|'),
       'originalImagePath': originalImagePath,
-      'enhancedImagePath': enhancedImagePath,
+      'enhancedImagePaths': enhancedImagePaths.join('|'),
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -61,7 +59,7 @@ class SavedGeneration {
       captionMandarin: map['captionMandarin'] as String,
       hashtags: (map['hashtags'] as String).split('|'),
       originalImagePath: map['originalImagePath'] as String,
-      enhancedImagePath: map['enhancedImagePath'] as String?,
+      enhancedImagePaths: (map['enhancedImagePaths'] as String?)?.split('|').where((s) => s.isNotEmpty).toList() ?? [],
       createdAt: DateTime.parse(map['createdAt'] as String),
     );
   }
@@ -78,7 +76,7 @@ class SavedGeneration {
     String? captionMandarin,
     List<String>? hashtags,
     String? originalImagePath,
-    String? enhancedImagePath,
+    List<String>? enhancedImagePaths,
     DateTime? createdAt,
   }) {
     return SavedGeneration(
@@ -92,7 +90,7 @@ class SavedGeneration {
       captionMandarin: captionMandarin ?? this.captionMandarin,
       hashtags: hashtags ?? this.hashtags,
       originalImagePath: originalImagePath ?? this.originalImagePath,
-      enhancedImagePath: enhancedImagePath ?? this.enhancedImagePath,
+      enhancedImagePaths: enhancedImagePaths ?? this.enhancedImagePaths,
       createdAt: createdAt ?? this.createdAt,
     );
   }
