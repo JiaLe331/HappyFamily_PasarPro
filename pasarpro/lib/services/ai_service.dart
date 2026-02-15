@@ -11,7 +11,7 @@ class GeminiService {
   late final String _baseUrl;
   
   GeminiService() {
-    _apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    _apiKey = dotenv.env['VERTEX_API_KEY'] ?? '';
     _projectId = dotenv.env['PROJECT_ID'] ?? '';
     _location = dotenv.env['REGION'] ?? '';
     _baseUrl = dotenv.env['BASE_URL'] ?? '';
@@ -150,7 +150,7 @@ All 3 images must:
 - Make suitable for social media posting
 ''';
 
-      final enhancedImages = await _callImageEnhanceAI(imageBytes, prompt);
+      final enhancedImages = await _callNanoBanana(imageBytes, prompt);
       return enhancedImages;
     }
     catch (e)
@@ -159,7 +159,7 @@ All 3 images must:
     }
   }
 
-  Future<List<Uint8List>> _callImageEnhanceAI(Uint8List imageBytes, String prompt) async
+  Future<List<Uint8List>> _callNanoBanana(Uint8List imageBytes, String prompt) async
   {
     final url = Uri
     (
@@ -284,6 +284,131 @@ Respond in JSON format:
     } catch (e) {
       throw Exception('Caption generation failed: $e');
     }
+  }
+
+  /// Generate a short video reel using up to 3 reference images
+  Future<List<Uint8List>> generateReels(List<File> referenceImageFiles, {String? customPrompt}) async
+  {
+    try
+    {
+      final imageBytesList = <Uint8List>[];
+      for (final imageFile in referenceImageFiles) {
+        final bytes = await imageFile.readAsBytes();
+        imageBytesList.add(bytes);
+      }
+
+      final prompt = customPrompt ??
+'''
+''';
+
+      final generatedReels = await _callVeo(imageBytesList, prompt);
+      return generatedReels;
+    }
+    catch (e)
+    {
+      throw Exception('Reels generation failed: $e');
+    }
+  }
+
+  Future<List<Uint8List>> _callVeo(List<Uint8List> imageBytesList, String prompt) async
+  {
+    final url = Uri
+    (
+      scheme: 'https',
+      host: _baseUrl,
+      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.5-flash-image:predictLongRunning',
+      queryParameters: {'key': _apiKey}
+    );
+    
+    final requestBody =
+    {
+      "instances": [
+        {
+          "prompt": prompt,
+          // The following fields can be repeated for up to three total
+          // images.
+          "referenceImages": [
+            {
+              "image": {
+                "bytesBase64Encoded": base64Encode(imageBytesList[0]),
+                "mimeType": "image/jpeg"
+              },
+              "referenceType": "asset"
+            },
+            {
+              "image": {
+                "bytesBase64Encoded": base64Encode(imageBytesList[1]),
+                "mimeType": "image/jpeg"
+              },
+              "referenceType": "asset"
+            },
+            {
+              "image": {
+                "bytesBase64Encoded": base64Encode(imageBytesList[2]),
+                "mimeType": "image/jpeg"
+              },
+              "referenceType": "asset"
+            }
+          ]
+        }
+      ],
+      "parameters": {
+        "aspectRatio": "9:16",
+        "durationSeconds": 8, // can let user choose
+        "sampleCount": 2,
+        "resolution": "720p", // can let user choose
+      }
+    };
+
+
+    print('[Generating Reels] Sending request...');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+    
+    print('[Generating Reels] Response status: ${response.statusCode}');
+    print('[Generating Reels] Response body: ${response.body}');
+    
+    if (response.statusCode != 200) 
+    {
+      print('[Generating Reels] Error response: ${response.body}');
+      throw Exception('Generating Reels API error: ${response.statusCode} - ${response.body}');
+    }
+
+    final responseData = jsonDecode(response.body);
+    final candidates = responseData['candidates'] as List?;
+    
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('No candidates in response');
+    }
+    
+    final List<Uint8List> generatedReels = [];
+    
+    for (final candidate in candidates) {
+      final parts = candidate?['content']?['parts'] as List?;
+      if (parts == null || parts.isEmpty) continue;
+      
+      for (final part in parts) {
+        if (part is Map && part.containsKey('videos')) {
+          final inlineData = part['videos'] as Map;
+          final base64Video = inlineData['gcsUri'] as String?;
+          
+          if (base64Video != null) {
+            generatedReels.add(base64Decode(base64Video));
+          }
+        }
+      }
+    }
+
+    print('[Generating Reels] Extracted ${generatedReels.length} videos.');
+    if (generatedReels.isEmpty) {
+      throw Exception('No video data in response');
+    }
+    
+    return generatedReels;
   }
 }
 
