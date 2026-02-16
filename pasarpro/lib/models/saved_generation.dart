@@ -11,6 +11,7 @@ class SavedGeneration {
   final List<String> hashtags;
   final String originalImagePath;
   final List<String> enhancedImagePaths;
+  final List<String> reelPaths;
   final DateTime createdAt;
   
   SavedGeneration({
@@ -25,6 +26,7 @@ class SavedGeneration {
     required this.hashtags,
     required this.originalImagePath,
     this.enhancedImagePaths = const [],
+    this.reelPaths = const [],
     required this.createdAt,
   });
   
@@ -42,6 +44,7 @@ class SavedGeneration {
       'hashtags': hashtags.join('|'),
       'originalImagePath': originalImagePath,
       'enhancedImagePaths': enhancedImagePaths.join('|'),
+      'reelPaths': reelPaths.join('|'),
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -60,6 +63,7 @@ class SavedGeneration {
       hashtags: (map['hashtags'] as String).split('|'),
       originalImagePath: map['originalImagePath'] as String,
       enhancedImagePaths: (map['enhancedImagePaths'] as String?)?.split('|').where((s) => s.isNotEmpty).toList() ?? [],
+      reelPaths: (map['reelPaths'] as String?)?.split('|').where((s) => s.isNotEmpty).toList() ?? [],
       createdAt: DateTime.parse(map['createdAt'] as String),
     );
   }
@@ -77,6 +81,7 @@ class SavedGeneration {
     List<String>? hashtags,
     String? originalImagePath,
     List<String>? enhancedImagePaths,
+    List<String>? reelPaths,
     DateTime? createdAt,
   }) {
     return SavedGeneration(
@@ -91,6 +96,7 @@ class SavedGeneration {
       hashtags: hashtags ?? this.hashtags,
       originalImagePath: originalImagePath ?? this.originalImagePath,
       enhancedImagePaths: enhancedImagePaths ?? this.enhancedImagePaths,
+      reelPaths: reelPaths ?? this.reelPaths,
       createdAt: createdAt ?? this.createdAt,
     );
   }

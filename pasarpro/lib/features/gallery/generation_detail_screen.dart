@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -11,6 +12,13 @@ import '../../models/saved_generation.dart';
 import '../../services/database_service.dart';
 import '../../services/instagram_service.dart';
 import '../../services/ai_service.dart';
+import '../growth/reel_generation_screen.dart';
+
+enum ReelGenerationState {
+  notGenerated,
+  generating,
+  generated,
+}
 
 class GenerationDetailScreen extends StatefulWidget {
   final SavedGeneration? generation; // null if newly generated
@@ -41,10 +49,12 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
   int _selectedImageIndex = 0;
   final DatabaseService _databaseService = DatabaseService();
   final InstagramService _instagramService = InstagramService();
+  final AiService _aiService = AiService();
   bool _isSaved = false;
   bool _isPostingToInstagram = false;
   void Function(void Function())? _dialogSetState;
   PostingStep _currentStep = PostingStep.uploadingImage;
+  ReelGenerationState _reelGenerationState = ReelGenerationState.notGenerated;
 
   bool get _isNewlyGenerated => widget.generation == null;
 
@@ -59,6 +69,11 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
       _saveToDatabase();
     } else {
       _isSaved = true;
+      _savedGeneration = widget.generation;
+      // Check if reels already exist for this generation
+      if (widget.generation!.reelPaths.isNotEmpty) {
+        _reelGenerationState = ReelGenerationState.generated;
+      }
     }
   }
 
@@ -66,6 +81,16 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  FoodAnalysis _getFoodAnalysis() {
+    final generation = _savedGeneration ?? widget.generation;
+    return widget.foodAnalysis ?? FoodAnalysis(
+      foodName: generation!.foodName,
+      cuisine: generation.cuisine,
+      description: generation.description,
+      ingredients: generation.ingredients,
+    );
   }
 
   String _getCurrentCaption() {
@@ -181,13 +206,47 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
         createdAt: DateTime.now(),
       );
 
-      await _databaseService.saveGeneration(generation);
+      final generationId = await _databaseService.saveGeneration(generation);
       setState(() {
-        _savedGeneration = generation;
+        _savedGeneration = generation.copyWith(id: generationId);
         _isSaved = true;
       });
     } catch (e) {
       print('[ERROR] Failed to save to database: $e');
+    }
+  }
+
+  Future<bool> _saveReelsToDatabase(List<Uint8List> reelBytesList) async {
+    if (_savedGeneration == null) return false;
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final reelsDir = Directory(path.join(appDir.path, 'reels'));
+      if (!await reelsDir.exists()) {
+        await reelsDir.create(recursive: true);
+      }
+
+      List<String> reelPaths = [];
+      for (int i = 0; i < reelBytesList.length; i++) {
+        final reelPath = path.join(reelsDir.path, 'reel_${_savedGeneration!.id}_${DateTime.now().millisecondsSinceEpoch}_$i.mp4');
+        final reelFile = File(reelPath);
+        await reelFile.writeAsBytes(reelBytesList[i]);
+        reelPaths.add(reelPath);
+      }
+
+      final updatedGeneration = _savedGeneration!.copyWith(
+        reelPaths: [..._savedGeneration!.reelPaths, ...reelPaths],
+      );
+
+      await _databaseService.updateGeneration(updatedGeneration);
+      setState(() {
+        _savedGeneration = updatedGeneration;
+      });
+
+      return true;
+    } catch (e) {
+      print('[ERROR] Failed to save reels to database: $e');
+      return false;
     }
   }
 
@@ -385,6 +444,63 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
     return tempFile;
   }
 
+  Future<void> _generateReels() async {
+    setState(() {
+      _reelGenerationState = ReelGenerationState.generating;
+    });
+
+    try {
+      final generation = _savedGeneration ?? widget.generation;
+      if (generation == null) {
+        throw Exception('Generation not available for reel saving');
+      }
+
+      List<File> images = [];
+      // If there are enhanced images, use them; otherwise, use the original image
+      for (String path in generation.enhancedImagePaths.isNotEmpty
+          ? generation.enhancedImagePaths
+          : [generation.originalImagePath]) {
+        images.add(File(path));
+      }
+
+      final reels = await _aiService.generateReels(images, _getFoodAnalysis());
+      
+      if (reels.isNotEmpty) 
+      {
+        bool saveSuccess = await _saveReelsToDatabase(reels);
+        
+
+        setState(() 
+        {
+          _reelGenerationState = saveSuccess ? ReelGenerationState.generated : ReelGenerationState.notGenerated;
+        });
+        
+      }
+      else
+      {
+        // If failed, set state back to not generated and show error message
+        setState(() 
+        {
+          _reelGenerationState = ReelGenerationState.notGenerated;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to generate reels. Please try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      
+    } catch (e) {
+      print('[ERROR] Reel generation error: $e');
+      setState(() {
+        _reelGenerationState = ReelGenerationState.notGenerated;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final generation = _savedGeneration ?? widget.generation;
@@ -418,66 +534,89 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
             )
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
           // Image display
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      image: DecorationImage(
-                        image: FileImage(imageFile),
-                        fit: BoxFit.cover,
-                      ),
+          Column(
+            children: [
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.all(16).copyWith(bottom: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    image: DecorationImage(
+                      image: FileImage(imageFile),
+                      fit: BoxFit.cover,
                     ),
                   ),
-                ),
-                if (generation.enhancedImagePaths.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Center(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildToggleButton('Original', 0),
-                              for (int i = 0;
-                                  i < generation.enhancedImagePaths.length;
-                                  i++)
-                                _buildToggleButton('Enhanced ${i + 1}', i + 1),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Food info & captions
-          Expanded(
-            flex: 3,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24),
                 ),
               ),
-              child: Column(
+              if (generation.enhancedImagePaths.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildToggleButton('Original', 0),
+                            for (int i = 0;
+                                i < generation.enhancedImagePaths.length;
+                                i++)
+                              _buildToggleButton('Enhanced ${i + 1}', i + 1),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 350), // Space for collapsed sheet
+            ],
+          ),
+          // Draggable Food info & captions
+          DraggableScrollableSheet(
+            initialChildSize: 0.4,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Drag handle
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        children: [
+                          Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -560,45 +699,36 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _getCurrentCaption(),
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.5,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: generation.hashtags
-                                .map((tag) => Chip(
-                                      label: Text(
-                                        tag,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      backgroundColor:
-                                          AppColors.primary.withOpacity(0.1),
-                                      labelStyle: TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                    ))
-                                .toList(),
-                          ),
-                        ],
-                      ),
+                  Text(
+                    _getCurrentCaption(),
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: AppColors.onSurface,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: generation.hashtags
+                        .map((tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              backgroundColor:
+                                  AppColors.primary.withOpacity(0.1),
+                              labelStyle: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                            ))
+                        .toList(),
                   ),
                   const SizedBox(height: 16),
                   Column(
@@ -623,6 +753,61 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                           label: Text(_isPostingToInstagram
                               ? 'Posting...'
                               : 'Post to Instagram'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _reelGenerationState == ReelGenerationState.generating
+                              ? null
+                              : (_reelGenerationState == ReelGenerationState.generated
+                                  ? () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ReelGenerationScreen(
+                                          reelPaths: generation.reelPaths,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  : _generateReels),
+                          icon: _reelGenerationState == ReelGenerationState.generating
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                        AlwaysStoppedAnimation<Color>(
+                                            Colors.white),
+                                  ),
+                                )
+                              : Icon(
+                                  _reelGenerationState == ReelGenerationState.generated
+                                      ? Icons.play_circle_outline_rounded
+                                      : Icons.video_library_rounded,
+                                  size: 18),
+                          label: Text(
+                            _reelGenerationState == ReelGenerationState.generating
+                                ? 'Generating Reels...'
+                                : _reelGenerationState == ReelGenerationState.generated
+                                    ? 'View Generated Reels'
+                                    : 'Generate Reels',
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -666,10 +851,17 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
                 ],
               ),
-            ),
+            ],
           ),
+          ),
+      ],
+    ),
+  );
+  },
+),
         ],
       ),
     );

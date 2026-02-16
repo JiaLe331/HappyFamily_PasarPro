@@ -4,20 +4,21 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class GeminiService {
+class AiService {
   late final String _apiKey;
   late final String _projectId;
   late final String _location;
   late final String _baseUrl;
+  static const String _veoModelId = 'veo-3.1-fast-generate-preview';
   
-  GeminiService() {
+  AiService() {
     _apiKey = dotenv.env['VERTEX_API_KEY'] ?? '';
     _projectId = dotenv.env['PROJECT_ID'] ?? '';
     _location = dotenv.env['REGION'] ?? '';
     _baseUrl = dotenv.env['BASE_URL'] ?? '';
     
     if (_apiKey.isEmpty) {
-      throw Exception('GEMINI_API_KEY not found in .env file');
+      throw Exception('VERTEX_API_KEY not found in .env file');
     }
   }
   
@@ -287,7 +288,7 @@ Respond in JSON format:
   }
 
   /// Generate a short video reel using up to 3 reference images
-  Future<List<Uint8List>> generateReels(List<File> referenceImageFiles, {String? customPrompt}) async
+  Future<List<Uint8List>> generateReels(List<File> referenceImageFiles, FoodAnalysis foodAnalysis) async
   {
     try
     {
@@ -297,8 +298,15 @@ Respond in JSON format:
         imageBytesList.add(bytes);
       }
 
-      final prompt = customPrompt ??
+      final prompt = 
 '''
+Create a short video reel for this Malaysian food
+- Food name: ${foodAnalysis.foodName}
+- Cuisine: ${foodAnalysis.cuisine}
+- Description: ${foodAnalysis.description}
+- Ingredients: ${foodAnalysis.ingredients.join(', ')}
+
+Use the reference images to create an engaging and appetizing video to showcase and promote the food on social media.
 ''';
 
       final generatedReels = await _callVeo(imageBytesList, prompt);
@@ -316,7 +324,7 @@ Respond in JSON format:
     (
       scheme: 'https',
       host: _baseUrl,
-      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.5-flash-image:predictLongRunning',
+      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$_veoModelId:predictLongRunning',
       queryParameters: {'key': _apiKey}
     );
     
@@ -325,26 +333,12 @@ Respond in JSON format:
       "instances": [
         {
           "prompt": prompt,
-          // The following fields can be repeated for up to three total
-          // images.
+          // The following fields can be repeated for up to three total images.
           "referenceImages": [
+            for (final imageBytes in imageBytesList)
             {
               "image": {
-                "bytesBase64Encoded": base64Encode(imageBytesList[0]),
-                "mimeType": "image/jpeg"
-              },
-              "referenceType": "asset"
-            },
-            {
-              "image": {
-                "bytesBase64Encoded": base64Encode(imageBytesList[1]),
-                "mimeType": "image/jpeg"
-              },
-              "referenceType": "asset"
-            },
-            {
-              "image": {
-                "bytesBase64Encoded": base64Encode(imageBytesList[2]),
+                "bytesBase64Encoded": base64Encode(imageBytes),
                 "mimeType": "image/jpeg"
               },
               "referenceType": "asset"
@@ -359,7 +353,6 @@ Respond in JSON format:
         "resolution": "720p", // can let user choose
       }
     };
-
 
     print('[Generating Reels] Sending request...');
 
@@ -379,23 +372,27 @@ Respond in JSON format:
     }
 
     final responseData = jsonDecode(response.body);
-    final candidates = responseData['candidates'] as List?;
+    final operationName = responseData['name'] as String?;
     
-    if (candidates == null || candidates.isEmpty) {
-      throw Exception('No candidates in response');
+    if (operationName == null) {
+      throw Exception('No operation name in response');
     }
+
+    print('[Generating Reels] Operation started: $operationName');
+
+    // Poll the operation until it completes
+    final result = await _pollLongRunningOperation(operationName);
     
     final List<Uint8List> generatedReels = [];
     
-    for (final candidate in candidates) {
-      final parts = candidate?['content']?['parts'] as List?;
-      if (parts == null || parts.isEmpty) continue;
-      
-      for (final part in parts) {
-        if (part is Map && part.containsKey('videos')) {
-          final inlineData = part['videos'] as Map;
-          final base64Video = inlineData['gcsUri'] as String?;
-          
+    // Extract videos from the operation result
+    final responsePayload = result['response'] ?? result['result'] ?? result['predictResponse'] ?? result;
+
+    final predictions = responsePayload['predictions'] as List?;
+    if (predictions != null) {
+      for (final prediction in predictions) {
+        if (prediction is Map<String, dynamic>) {
+          final base64Video = prediction['bytesBase64Encoded'] as String?;
           if (base64Video != null) {
             generatedReels.add(base64Decode(base64Video));
           }
@@ -403,12 +400,82 @@ Respond in JSON format:
       }
     }
 
+    if (generatedReels.isEmpty) {
+      final videosList = responsePayload['videos'] as List?;
+      if (videosList != null) {
+        for (final video in videosList) {
+          if (video is Map<String, dynamic>) {
+            final base64Video = video['bytesBase64Encoded'] as String?;
+            if (base64Video != null) {
+              generatedReels.add(base64Decode(base64Video));
+            }
+          }
+        }
+      }
+    }
+
     print('[Generating Reels] Extracted ${generatedReels.length} videos.');
     if (generatedReels.isEmpty) {
-      throw Exception('No video data in response');
+      throw Exception('No video data in operation result');
     }
     
     return generatedReels;
+  }
+
+  Future<Map<String, dynamic>> _pollLongRunningOperation(String operationName) async {
+    // 2 Minutes 30 Seconds
+    const maxAttempts = 5; 
+    const delaySeconds = 30;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      final url = Uri(
+        scheme: 'https',
+        host: _baseUrl,
+        path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$_veoModelId:fetchPredictOperation',
+        queryParameters: {'key': _apiKey},
+      );
+
+      print('[Polling Operation] Checking: ${url.toString()}');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'operationName': operationName}),
+      );
+
+      print('[Polling Operation] Attempt ${attempt + 1}/$maxAttempts - Status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get operation status: ${response.statusCode} - ${response.body}');
+      }
+
+      final operationData = jsonDecode(response.body) as Map<String, dynamic>;
+      final isDone = operationData['done'] as bool? ?? false;
+
+      if (isDone) {
+        print('[Polling Operation] Operation completed!');
+        
+        // Check for errors
+        if (operationData.containsKey('error')) {
+          throw Exception('Operation failed: ${operationData['error']}');
+        }
+
+        final payload = operationData['response'] ?? operationData['result'] ?? operationData;
+        if (payload is! Map<String, dynamic>) {
+          throw Exception('No result payload in completed operation');
+        }
+
+        final prettyJson = const JsonEncoder.withIndent('  ').convert(payload);
+        print('[Polling Operation] Result payload:\n$prettyJson');
+
+        return payload;
+      }
+
+      print('[Polling Operation] Operation still running, waiting ${delaySeconds}s...');
+      await Future.delayed(Duration(seconds: delaySeconds));
+    }
+
+    throw Exception('Operation timed out after ${maxAttempts * delaySeconds} seconds');
   }
 }
 

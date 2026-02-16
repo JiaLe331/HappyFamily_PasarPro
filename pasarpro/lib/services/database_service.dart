@@ -27,7 +27,7 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -48,6 +48,7 @@ class DatabaseService {
         hashtags TEXT NOT NULL,
         originalImagePath TEXT NOT NULL,
         enhancedImagePaths TEXT,
+        reelPaths TEXT,
         createdAt TEXT NOT NULL
       )
     ''');
@@ -59,6 +60,12 @@ class DatabaseService {
       // Migrate from single enhancedImagePath to multiple enhancedImagePaths
       await db.execute('''
         ALTER TABLE generations RENAME COLUMN enhancedImagePath TO enhancedImagePaths
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        ALTER TABLE generations ADD COLUMN reelPaths TEXT
       ''');
     }
   }
@@ -135,6 +142,20 @@ class DatabaseService {
             final enhancedFile = File(enhancedPath);
             if (await enhancedFile.exists()) {
               await enhancedFile.delete();
+            }
+          } catch (e) {
+            // Ignore file deletion errors
+          }
+        }
+      }
+
+      // Delete reel files if exist
+      if (generation.reelPaths.isNotEmpty) {
+        for (final reelPath in generation.reelPaths) {
+          try {
+            final reelFile = File(reelPath);
+            if (await reelFile.exists()) {
+              await reelFile.delete();
             }
           } catch (e) {
             // Ignore file deletion errors

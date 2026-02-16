@@ -19,7 +19,7 @@ class ImageProcessingScreen extends StatefulWidget {
 }
 
 class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
-  final GeminiService _geminiService = GeminiService();
+  final AiService _aiService = AiService();
   final ImageService _imageService = ImageService();
 
   // Processing states
@@ -76,7 +76,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     });
 
     try {
-      final analysis = await _geminiService.analyzeFood(widget.imageFile);
+      final analysis = await _aiService.analyzeFood(widget.imageFile);
       setState(() {
         _foodAnalysis = analysis;
         _isAnalyzing = false;
@@ -93,7 +93,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     setState(() => _isEnhancing = true);
 
     try {
-      final enhanced = await _geminiService.enhanceImage(widget.imageFile);
+      final enhanced = await _aiService.enhanceImage(widget.imageFile);
       setState(() {
         _enhancedImageBytes = enhanced;
         _isEnhancing = false;
@@ -108,7 +108,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     setState(() => _isGeneratingCaptions = true);
 
     try {
-      final captions = await _geminiService.generateCaptions(
+      final captions = await _aiService.generateCaptions(
         _foodAnalysis!.foodName,
         _foodAnalysis!.description,
       );
