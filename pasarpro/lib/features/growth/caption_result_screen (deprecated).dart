@@ -1,3 +1,4 @@
+/// DEPRECATED - This screen is no longer used in the app, but kept for reference and potential future use.
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -6,8 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../../core/constants/app_colors.dart';
-import '../../services/gemini_service.dart';
-import '../../services/image_service.dart';
+import '../../services/ai_service.dart';
 import '../../services/database_service.dart';
 import '../../services/instagram_service.dart';
 import '../../models/saved_generation.dart';
@@ -34,7 +34,6 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _selectedImageIndex = 0; // 0 = original, 1-3 = enhanced variations
-  final ImageService _imageService = ImageService();
   final DatabaseService _databaseService = DatabaseService();
   final InstagramService _instagramService = InstagramService();
   bool _isSaved = false;
@@ -121,13 +120,15 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
       final originalImagePath = path.join(imagesDir.path, 'original_$timestamp.jpg');
       await widget.originalImage.copy(originalImagePath);
       
-      // Save enhanced image if available
-      String? enhancedImagePath;
+      // Save all enhanced images if available
+      List<String> enhancedImagePaths = [];
       if (widget.enhancedImageBytes != null && widget.enhancedImageBytes!.isNotEmpty) {
-        enhancedImagePath = path.join(imagesDir.path, 'enhanced_$timestamp.jpg');
-        final enhancedFile = File(enhancedImagePath);
-        // Save first enhanced variation by default
-        await enhancedFile.writeAsBytes(widget.enhancedImageBytes!.first);
+        for (int i = 0; i < widget.enhancedImageBytes!.length; i++) {
+          final enhancedPath = path.join(imagesDir.path, 'enhanced_${timestamp}_$i.jpg');
+          final enhancedFile = File(enhancedPath);
+          await enhancedFile.writeAsBytes(widget.enhancedImageBytes![i]);
+          enhancedImagePaths.add(enhancedPath);
+        }
       }
       
       // Create SavedGeneration object
@@ -141,7 +142,7 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
         captionMandarin: widget.captions.mandarin,
         hashtags: widget.captions.hashtags,
         originalImagePath: originalImagePath,
-        enhancedImagePath: enhancedImagePath,
+        enhancedImagePaths: enhancedImagePaths,
         createdAt: DateTime.now(),
       );
       
@@ -259,12 +260,14 @@ class _CaptionResultScreenState extends State<CaptionResultScreen>
     );
     
     try {
-      // Use enhanced image if available, otherwise original
-      final imageToPost = _showEnhanced && widget.enhancedImageBytes != null
-          ? await _createTempFile(widget.enhancedImageBytes!)
+      // Use selected image for posting
+      final imageToPost = _selectedImageIndex > 0 && 
+                          widget.enhancedImageBytes != null &&
+                          _selectedImageIndex <= widget.enhancedImageBytes!.length
+          ? await _createTempFile(widget.enhancedImageBytes![_selectedImageIndex - 1])
           : widget.originalImage;
       
-      final success = await _instagramService.postToInstagram(
+      await _instagramService.postToInstagram(
         imageFile: imageToPost,
         caption: _getFullCaption(),
         onProgress: (step) {

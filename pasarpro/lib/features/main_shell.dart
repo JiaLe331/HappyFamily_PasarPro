@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
-import 'home/home_screen.dart';
-import 'templates/templates_screen.dart';
-import 'camera/camera_screen.dart';
+import 'camera/post_image_screen.dart';
 import 'gallery/gallery_screen.dart';
+import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
+import 'templates/templates_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -19,7 +19,7 @@ class _MainShellState extends State<MainShell> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const TemplatesScreen(),
-    const CameraScreen(),
+    const SizedBox(),
     const GalleryScreen(),
     const ProfileScreen(),
   ];
@@ -116,7 +116,11 @@ class _MainShellState extends State<MainShell> {
         ],
       ),
       child: FloatingActionButton(
-        onPressed: () => _onTabTapped(2),
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PostImageScreen()),
+          );
+        },
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: Icon(
