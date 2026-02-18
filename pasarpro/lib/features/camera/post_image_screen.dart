@@ -4,14 +4,14 @@ import '../../core/constants/app_colors.dart';
 import '../../services/image_service.dart';
 import '../growth/image_processing_screen.dart';
 
-class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+class PostImageScreen extends StatefulWidget {
+  const PostImageScreen({super.key});
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  State<PostImageScreen> createState() => _PostImageState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _PostImageState extends State<PostImageScreen> {
   final ImageService _imageService = ImageService();
   bool _isProcessing = false;
 

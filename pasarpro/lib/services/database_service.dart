@@ -27,8 +27,9 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
   
@@ -46,10 +47,27 @@ class DatabaseService {
         captionMandarin TEXT NOT NULL,
         hashtags TEXT NOT NULL,
         originalImagePath TEXT NOT NULL,
-        enhancedImagePath TEXT,
+        enhancedImagePaths TEXT,
+        reelPaths TEXT,
         createdAt TEXT NOT NULL
       )
     ''');
+  }
+  
+  /// Handle database upgrades
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Migrate from single enhancedImagePath to multiple enhancedImagePaths
+      await db.execute('''
+        ALTER TABLE generations RENAME COLUMN enhancedImagePath TO enhancedImagePaths
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        ALTER TABLE generations ADD COLUMN reelPaths TEXT
+      ''');
+    }
   }
   
   /// Save a new generation
@@ -117,15 +135,31 @@ class DatabaseService {
         // Ignore file deletion errors
       }
       
-      // Delete enhanced image file if exists
-      if (generation.enhancedImagePath != null) {
-        try {
-          final enhancedFile = File(generation.enhancedImagePath!);
-          if (await enhancedFile.exists()) {
-            await enhancedFile.delete();
+      // Delete enhanced image files if exist
+      if (generation.enhancedImagePaths.isNotEmpty) {
+        for (final enhancedPath in generation.enhancedImagePaths) {
+          try {
+            final enhancedFile = File(enhancedPath);
+            if (await enhancedFile.exists()) {
+              await enhancedFile.delete();
+            }
+          } catch (e) {
+            // Ignore file deletion errors
           }
-        } catch (e) {
-          // Ignore file deletion errors
+        }
+      }
+
+      // Delete reel files if exist
+      if (generation.reelPaths.isNotEmpty) {
+        for (final reelPath in generation.reelPaths) {
+          try {
+            final reelFile = File(reelPath);
+            if (await reelFile.exists()) {
+              await reelFile.delete();
+            }
+          } catch (e) {
+            // Ignore file deletion errors
+          }
         }
       }
     }

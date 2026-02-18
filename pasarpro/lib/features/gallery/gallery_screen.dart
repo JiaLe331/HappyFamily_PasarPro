@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/saved_generation.dart';
 import '../../services/database_service.dart';
+import '../growth/caption_result_screen (deprecated).dart';
 import 'generation_detail_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -201,7 +202,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Widget _buildGalleryCard(SavedGeneration generation) {
-    final imageFile = File(generation.enhancedImagePath ?? generation.originalImagePath);
+    final imageFile = File(generation.originalImagePath);
     final dateFormat = DateFormat('MMM d, y');
     
     return GestureDetector(

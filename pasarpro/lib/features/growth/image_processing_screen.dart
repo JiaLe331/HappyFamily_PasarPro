@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
-import '../../services/gemini_service.dart';
+import '../../services/ai_service.dart';
 import '../../services/image_service.dart';
-import 'caption_result_screen.dart';
+import '../gallery/generation_detail_screen.dart';
 
 class ImageProcessingScreen extends StatefulWidget {
   final File imageFile;
@@ -19,7 +19,7 @@ class ImageProcessingScreen extends StatefulWidget {
 }
 
 class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
-  final GeminiService _geminiService = GeminiService();
+  final AiService _aiService = AiService();
   final ImageService _imageService = ImageService();
 
   // Processing states
@@ -29,7 +29,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
   
   // Results
   FoodAnalysis? _foodAnalysis;
-  Uint8List? _enhancedImageBytes;
+  List<Uint8List>? _enhancedImageBytes;
   CaptionSet? _captions;
   String? _error;
 
@@ -58,7 +58,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => CaptionResultScreen(
+          builder: (context) => GenerationDetailScreen(
             originalImage: widget.imageFile,
             enhancedImageBytes: _enhancedImageBytes,
             foodAnalysis: _foodAnalysis!,
@@ -76,7 +76,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     });
 
     try {
-      final analysis = await _geminiService.analyzeFood(widget.imageFile);
+      final analysis = await _aiService.analyzeFood(widget.imageFile);
       setState(() {
         _foodAnalysis = analysis;
         _isAnalyzing = false;
@@ -93,7 +93,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     setState(() => _isEnhancing = true);
 
     try {
-      final enhanced = await _geminiService.enhanceImage(widget.imageFile);
+      final enhanced = await _aiService.enhanceImage(widget.imageFile);
       setState(() {
         _enhancedImageBytes = enhanced;
         _isEnhancing = false;
@@ -108,7 +108,7 @@ class _ImageProcessingScreenState extends State<ImageProcessingScreen> {
     setState(() => _isGeneratingCaptions = true);
 
     try {
-      final captions = await _geminiService.generateCaptions(
+      final captions = await _aiService.generateCaptions(
         _foodAnalysis!.foodName,
         _foodAnalysis!.description,
       );
