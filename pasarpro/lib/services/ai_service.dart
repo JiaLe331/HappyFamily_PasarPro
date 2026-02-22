@@ -287,6 +287,15 @@ Respond in JSON format:
     }
   }
 
+  /// Generate a plain-text caption from a freeform prompt (no image needed)
+  Future<String> generateCaption(String prompt) async {
+    try {
+      return await _callVertexAI('gemini-2.5-flash', prompt, null);
+    } catch (e) {
+      throw Exception('Caption generation failed: $e');
+    }
+  }
+
   /// Generate a short video reel using up to 3 reference images
   Future<List<Uint8List>> generateReels(List<File> referenceImageFiles, FoodAnalysis foodAnalysis) async
   {
