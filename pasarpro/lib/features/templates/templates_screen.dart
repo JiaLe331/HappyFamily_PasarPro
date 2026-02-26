@@ -14,10 +14,11 @@ class TemplatesScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           'Templates',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w700, color: AppColors.onPrimary),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.onSurface,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -38,8 +39,8 @@ class TemplatesScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -68,8 +69,8 @@ class TemplatesScreen extends StatelessWidget {
                     'Upload your food photo, fill in the details, '
                     'and we\'ll render a stunning promotional poster — '
                     'with an AI-written caption.',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
                       color: AppColors.onSurfaceVariant,
                       height: 1.5,
                     ),
@@ -100,8 +101,7 @@ class TemplatesScreen extends StatelessWidget {
                     template: PosterTemplate.flashSale,
                     headline: 'FLASH SALE',
                     tagline: 'High urgency · High contrast',
-                    description:
-                        'Large circular price badge at top-right.\n'
+                    description: 'Large circular price badge at top-right.\n'
                         '"FLASH SALE" banner stamped at the bottom.\n'
                         'Red background, bold yellow typography.',
                     gradient: const [Color(0xFFE53935), Color(0xFFFF7043)],
@@ -122,8 +122,7 @@ class TemplatesScreen extends StatelessWidget {
                     template: PosterTemplate.newMenu,
                     headline: 'NEW ARRIVAL',
                     tagline: 'Clean · Premium · Minimalist',
-                    description:
-                        'Food photo centred with a soft drop shadow.\n'
+                    description: 'Food photo centred with a soft drop shadow.\n'
                         '"NEW ARRIVAL" pill badge in the header.\n'
                         'Elegant serif typography on a warm white canvas.',
                     gradient: const [Color(0xFF37474F), Color(0xFF607D8B)],
@@ -144,8 +143,7 @@ class TemplatesScreen extends StatelessWidget {
                     template: PosterTemplate.dailyPromo,
                     headline: 'DAILY PROMO',
                     tagline: 'Warm · Community · Earth Tones',
-                    description:
-                        'Split-screen layout — photo on the left,\n'
+                    description: 'Split-screen layout — photo on the left,\n'
                         'offer details with bullet points on the right.\n'
                         'Rounded, friendly Nunito typface.',
                     gradient: const [Color(0xFF2E7D32), Color(0xFF388E3C)],
@@ -156,8 +154,7 @@ class TemplatesScreen extends StatelessWidget {
                       '↔️ Split Screen',
                       '📋 Bullet Points',
                     ],
-                    onTap: () =>
-                        _navigate(context, PosterTemplate.dailyPromo),
+                    onTap: () => _navigate(context, PosterTemplate.dailyPromo),
                   ),
 
                   const SizedBox(height: 40),
@@ -213,20 +210,14 @@ class _TemplateCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: gradient.first.withOpacity(0.12),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.outline.withOpacity(0.5)),
         ),
         child: Column(
           children: [
             // ── Gradient header ────────────────────────────────────────
             Container(
-              height: 110,
+              height: 120,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: gradient,
@@ -234,7 +225,7 @@ class _TemplateCard extends StatelessWidget {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                  top: Radius.circular(24),
                 ),
               ),
               child: Stack(
@@ -257,16 +248,17 @@ class _TemplateCard extends StatelessWidget {
                       children: [
                         Text(
                           headline,
-                          style: GoogleFonts.bebasNeue(
-                            fontSize: 26,
+                          style: GoogleFonts.outfit(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
-                            letterSpacing: 2,
+                            letterSpacing: 1,
                           ),
                         ),
                         Text(
                           tagline,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
                             color: Colors.white70,
                             fontWeight: FontWeight.w500,
                           ),
@@ -302,16 +294,16 @@ class _TemplateCard extends StatelessWidget {
 
             // ── Body ──────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     description,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
                       color: AppColors.onSurfaceVariant,
-                      height: 1.6,
+                      height: 1.5,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -332,8 +324,8 @@ class _TemplateCard extends StatelessWidget {
                             ),
                             child: Text(
                               tag,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: gradient.first,
                               ),

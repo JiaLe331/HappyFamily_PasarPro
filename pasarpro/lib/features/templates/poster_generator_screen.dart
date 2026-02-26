@@ -134,8 +134,7 @@ class _PosterGeneratorScreenState extends State<PosterGeneratorScreen>
   }
 
   void _showSnack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -146,10 +145,11 @@ class _PosterGeneratorScreenState extends State<PosterGeneratorScreen>
       appBar: AppBar(
         title: Text(
           'Poster Generator',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w700, color: AppColors.onPrimary),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.onSurface,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: FadeTransition(
@@ -203,8 +203,9 @@ class _PosterGeneratorScreenState extends State<PosterGeneratorScreen>
                   hint: 'e.g. Nasi Lemak',
                   icon: Icons.restaurant_menu_rounded,
                   accentColor: _primaryColor,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Enter item name' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Enter item name'
+                      : null,
                 ),
                 const SizedBox(height: 14),
                 _PasarTextField(
@@ -224,10 +225,9 @@ class _PosterGeneratorScreenState extends State<PosterGeneratorScreen>
                   hint: _promoPlaceholder,
                   icon: Icons.local_offer_rounded,
                   accentColor: _primaryColor,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty)
-                          ? 'Enter promo text'
-                          : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Enter promo text'
+                      : null,
                 ),
 
                 const SizedBox(height: 36),
@@ -364,9 +364,7 @@ class _TemplateChip extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   const _TemplateChip(
-      {required this.template,
-      required this.isSelected,
-      required this.onTap});
+      {required this.template, required this.isSelected, required this.onTap});
 
   Color get _color => switch (template) {
         PosterTemplate.flashSale => const Color(0xFFE53935),
@@ -410,8 +408,7 @@ class _TemplateChip extends StatelessWidget {
             color: _color.withOpacity(0.15),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Text(template.emoji,
-              style: const TextStyle(fontSize: 22)),
+          child: Text(template.emoji, style: const TextStyle(fontSize: 22)),
         ),
         title: Text(
           template.displayName,
@@ -422,7 +419,7 @@ class _TemplateChip extends StatelessWidget {
         ),
         subtitle: Text(
           _subtitle,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.outfit(
               fontSize: 12, color: AppColors.onSurfaceVariant),
         ),
         trailing: isSelected
@@ -473,15 +470,14 @@ class _ImageUploadBox extends StatelessWidget {
                       size: 52, color: primaryColor.withOpacity(0.7)),
                   const SizedBox(height: 12),
                   Text('Tap to upload food photo',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                           color: primaryColor,
                           fontWeight: FontWeight.w600,
                           fontSize: 14)),
                   const SizedBox(height: 4),
                   Text('Camera or Gallery',
-                      style: GoogleFonts.inter(
-                          color: AppColors.onSurfaceVariant,
-                          fontSize: 12)),
+                      style: GoogleFonts.outfit(
+                          color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ],
               )
             : Stack(
@@ -550,14 +546,14 @@ class _PasarTextField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
-      style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
+      style: GoogleFonts.outfit(fontSize: 15, color: AppColors.onSurface),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        hintStyle: GoogleFonts.inter(
-            color: AppColors.onSurfaceVariant, fontSize: 14),
+        hintStyle:
+            GoogleFonts.outfit(color: AppColors.onSurfaceVariant, fontSize: 14),
         labelStyle:
-            GoogleFonts.inter(color: accentColor, fontWeight: FontWeight.w600),
+            GoogleFonts.outfit(color: accentColor, fontWeight: FontWeight.w600),
         prefixIcon: Icon(icon, color: accentColor, size: 20),
         filled: true,
         fillColor: Colors.white,
@@ -621,8 +617,7 @@ class _ImageSourceSheet extends StatelessWidget {
                   icon: Icons.camera_alt_rounded,
                   label: 'Camera',
                   color: primaryColor,
-                  onTap: () =>
-                      Navigator.pop(context, ImageSource.camera),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
                 ),
               ),
               const SizedBox(width: 16),
@@ -631,8 +626,7 @@ class _ImageSourceSheet extends StatelessWidget {
                   icon: Icons.photo_library_rounded,
                   label: 'Gallery',
                   color: primaryColor,
-                  onTap: () =>
-                      Navigator.pop(context, ImageSource.gallery),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
                 ),
               ),
             ],

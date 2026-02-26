@@ -7,7 +7,6 @@ import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
-
 import '../../core/constants/app_colors.dart';
 import '../../services/poster_service.dart';
 
@@ -64,8 +63,8 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
 
   // ── Capture RepaintBoundary → PNG bytes ──────────────────────────────────
   Future<Uint8List> _capturePoster() async {
-    final boundary = _repaintKey.currentContext!.findRenderObject()
-        as RenderRepaintBoundary;
+    final boundary =
+        _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
     final image = await boundary.toImage(pixelRatio: 3.0);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData!.buffer.asUint8List();
@@ -95,7 +94,6 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
     }
   }
 
-
   // ── Route to correct template widget ─────────────────────────────────────
   Widget _buildPoster() {
     return switch (widget.template) {
@@ -120,23 +118,18 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
     };
   }
 
-  Color get _accentColor => switch (widget.template) {
-        PosterTemplate.flashSale => const Color(0xFFE53935),
-        PosterTemplate.newMenu => const Color(0xFF37474F),
-        PosterTemplate.dailyPromo => const Color(0xFF2E7D32),
-      };
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: Text(
           'Poster Preview',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w700, color: AppColors.onPrimary),
         ),
-        backgroundColor: const Color(0xFF16213E),
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: Column(
@@ -156,7 +149,7 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: _accentColor.withOpacity(0.35),
+                              color: Colors.black.withOpacity(0.05),
                               blurRadius: 32,
                               spreadRadius: 4,
                             ),
@@ -178,23 +171,23 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
+                          color: AppColors.cardWhite,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.12)),
+                              color: AppColors.outline.withOpacity(0.5)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.auto_awesome_rounded,
-                                    color: Color(0xFFFFD600), size: 18),
+                                Icon(Icons.auto_awesome_rounded,
+                                    color: AppColors.accent, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
                                   'AI-Generated Caption',
                                   style: GoogleFonts.outfit(
-                                    color: const Color(0xFFFFD600),
+                                    color: AppColors.accent,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 13,
                                   ),
@@ -204,8 +197,8 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
                             const SizedBox(height: 10),
                             Text(
                               widget.aiCaption,
-                              style: GoogleFonts.inter(
-                                  color: Colors.white,
+                              style: GoogleFonts.outfit(
+                                  color: AppColors.onSurface,
                                   fontSize: 14,
                                   height: 1.6),
                             ),
@@ -223,41 +216,15 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
           Container(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
             decoration: BoxDecoration(
-              color: const Color(0xFF16213E),
+              color: AppColors.surface,
               border: Border(
-                  top: BorderSide(
-                      color: Colors.white.withOpacity(0.08))),
+                  top: BorderSide(color: AppColors.outline.withOpacity(0.5))),
             ),
-            child: Row(
+            child: Column(
               children: [
-                // Copy caption
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      // Copy to clipboard (we have no Clipboard import, use snackbar hint)
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Caption copied! ✅')),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: Text('Copy Caption',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(
-                          color: Colors.white.withOpacity(0.3)),
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Share poster
-                Expanded(
-                  flex: 2,
+                // Share poster (Primary Action)
+                SizedBox(
+                  width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: _isSaving ? null : _sharePoster,
                     icon: _isSaving
@@ -267,20 +234,45 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2),
                           )
-                        : const Icon(Icons.share_rounded),
+                        : const Icon(Icons.share_rounded, size: 18),
                     label: Text(
                       _isSaving ? 'Saving…' : 'Share Poster',
                       style: GoogleFonts.outfit(
                           fontWeight: FontWeight.w700, fontSize: 15),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _accentColor,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Copy caption
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      // Copy to clipboard (we have no Clipboard import, use snackbar hint)
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('Caption copied! ✅',
+                                style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w500))),
+                      );
+                    },
+                    icon: Icon(Icons.copy_rounded, size: 18),
+                    label: Text('Copy Caption',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ),
@@ -342,8 +334,8 @@ class _FlashSale01Poster extends StatelessWidget {
               right: 0,
               bottom: 0,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 18, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
                 decoration: const BoxDecoration(
                   color: Color(0xFFE53935),
                 ),
@@ -648,8 +640,8 @@ class _DailyPromo01Poster extends StatelessWidget {
               Container(
                 width: double.infinity,
                 color: const Color(0xFF2E7D32),
-                padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
                 child: Row(
                   children: [
                     Text(
@@ -753,8 +745,8 @@ class _DailyPromo01Poster extends StatelessWidget {
               Container(
                 width: double.infinity,
                 color: const Color(0xFF8D6E63),
-                padding: const EdgeInsets.symmetric(
-                    vertical: 8, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 8, horizontal: 20),
                 child: Text(
                   'Nikmati setiap hidangan bersama kami 🍃',
                   style: GoogleFonts.nunito(

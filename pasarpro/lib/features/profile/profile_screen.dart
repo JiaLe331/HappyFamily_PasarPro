@@ -78,7 +78,12 @@ class ProfileScreen extends StatelessWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 12),
-        Card(
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+          ),
           child: Column(
             children: [
               _buildListTile(
@@ -86,19 +91,19 @@ class ProfileScreen extends StatelessWidget {
                 title: 'Stall Name',
                 subtitle: 'Ah Meng Char Kway Teow',
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppColors.outline.withOpacity(0.5)),
               _buildListTile(
                 icon: Icons.location_on_rounded,
                 title: 'Location',
                 subtitle: 'Penang Road, Georgetown',
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppColors.outline.withOpacity(0.5)),
               _buildListTile(
                 icon: Icons.restaurant_rounded,
                 title: 'Cuisine Type',
                 subtitle: 'Malaysian Street Food',
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppColors.outline.withOpacity(0.5)),
               _buildListTile(
                 icon: Icons.phone_rounded,
                 title: 'Contact',
@@ -117,7 +122,12 @@ class ProfileScreen extends StatelessWidget {
       children: [
         Text('Settings ⚙️', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        Card(
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+          ),
           child: Column(
             children: [
               _buildListTile(
@@ -126,14 +136,14 @@ class ProfileScreen extends StatelessWidget {
                 subtitle: 'English, Malay, Mandarin',
                 trailing: Icons.arrow_forward_ios_rounded,
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppColors.outline.withOpacity(0.5)),
               _buildListTile(
                 icon: Icons.notifications_rounded,
                 title: 'Notifications',
                 subtitle: 'Push, Email',
                 trailing: Icons.arrow_forward_ios_rounded,
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppColors.outline.withOpacity(0.5)),
               _buildListTile(
                 icon: Icons.help_rounded,
                 title: 'Help & Support',
@@ -153,9 +163,14 @@ class ProfileScreen extends StatelessWidget {
       children: [
         Text('About PasarPro', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        Card(
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/saved_generation.dart';
 import '../../services/database_service.dart';
-import '../growth/caption_result_screen (deprecated).dart';
+import '../camera/post_image_screen.dart';
 import 'generation_detail_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -92,7 +92,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               style: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
-            
+
             // Filter chips
             Row(
               children: [
@@ -102,7 +102,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            
+
             // Content
             Expanded(
               child: _isLoading
@@ -163,8 +163,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () {
-              // Navigate to camera tab (index 2)
-              DefaultTabController.of(context).animateTo(2);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PostImageScreen()),
+              );
             },
             icon: const Icon(Icons.add_a_photo_rounded),
             label: const Text('Create Content'),
@@ -204,13 +205,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget _buildGalleryCard(SavedGeneration generation) {
     final imageFile = File(generation.originalImagePath);
     final dateFormat = DateFormat('MMM d, y');
-    
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => GenerationDetailScreen(generation: generation),
+            builder: (context) =>
+                GenerationDetailScreen(generation: generation),
           ),
         ).then((_) => _loadGenerations()); // Refresh after returning
       },
@@ -219,9 +221,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -241,7 +243,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   );
                 },
               ),
-              
+
               // Gradient overlay
               Container(
                 decoration: BoxDecoration(
@@ -255,7 +257,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ),
                 ),
               ),
-              
+
               // Content
               Positioned(
                 bottom: 0,
@@ -299,7 +301,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ),
                 ),
               ),
-              
+
               // Delete button
               Positioned(
                 top: 8,
@@ -334,7 +336,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Generation?'),
-        content: Text('Are you sure you want to delete "${generation.foodName}"?'),
+        content:
+            Text('Are you sure you want to delete "${generation.foodName}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

@@ -159,7 +159,8 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
     final text = _transcript.trim();
     if (text.isEmpty) {
       setState(() => _statusMessage = 'Could not hear anything. Try again.');
-      _showSnack('Could not understand audio. Please try again.', isError: true);
+      _showSnack('Could not understand audio. Please try again.',
+          isError: true);
       return;
     }
 
@@ -333,9 +334,12 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
         _summary.totalExpense > 0 ||
         _summary.totalProfit != 0;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -481,8 +485,7 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
             },
           ),
         ),
-        topTitles:
-            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         rightTitles:
             const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       ),
@@ -539,9 +542,12 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
   // ── Microphone Section ────────────────────────────────────────────────────
 
   Widget _buildMicSection() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
         child: Column(
@@ -579,10 +585,9 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: (_isListening
-                                ? AppColors.error
-                                : AppColors.primary)
-                            .withValues(alpha: 0.35),
+                        color:
+                            (_isListening ? AppColors.error : AppColors.primary)
+                                .withValues(alpha: 0.35),
                         blurRadius: _isListening ? 28 : 14,
                         spreadRadius: _isListening ? 6 : 0,
                         offset: const Offset(0, 4),
@@ -637,11 +642,11 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
   // ── Transcript Card ───────────────────────────────────────────────────────
 
   Widget _buildTranscriptCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
+        border: Border.all(
           color: _isListening
               ? AppColors.error.withValues(alpha: 0.4)
               : AppColors.accent.withValues(alpha: 0.4),
@@ -725,9 +730,12 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         child: Column(
