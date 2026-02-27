@@ -297,71 +297,67 @@ class _PosterPreviewScreenState extends State<PosterPreviewScreen>
             ),
             child: Column(
               children: [
-                // Share poster (Primary Action)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSaving ? null : _sharePoster,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          // Copy to clipboard (we have no Clipboard import, use snackbar hint)
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Caption copied! ✅',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          )
-                        : const Icon(Icons.share_rounded, size: 18),
-                    label: Text(
-                      _isSaving ? 'Saving…' : 'Share Poster',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Copy caption
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      // Copy to clipboard (we have no Clipboard import, use snackbar hint)
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Caption copied! ✅',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w500,
-                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        label: Text(
+                          'Copy Caption',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      );
-                    },
-                    icon: Icon(Icons.copy_rounded, size: 18),
-                    label: Text(
-                      'Copy Caption',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: BorderSide(color: AppColors.primary),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving ? null : _sharePoster,
+                        icon: _isSaving
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.share_rounded, size: 18),
+                        label: Text(
+                          _isSaving ? 'Saving…' : 'Share',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w700,
+                            // fontSize: 15, // matching style from orig, wait Let's stick to default size like generation detail
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

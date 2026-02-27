@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -12,13 +11,12 @@ import '../../models/saved_generation.dart';
 import '../../services/database_service.dart';
 import '../../services/instagram_service.dart';
 import '../../services/ai_service.dart';
+import '../../services/background_reel_service.dart';
 import '../growth/reel_generation_screen.dart';
+import '../templates/poster_generator_screen.dart';
+import '../../services/poster_service.dart';
 
-enum ReelGenerationState {
-  notGenerated,
-  generating,
-  generated,
-}
+enum ReelGenerationState { notGenerated, generating, generated }
 
 class GenerationDetailScreen extends StatefulWidget {
   final SavedGeneration? generation; // null if newly generated
@@ -35,9 +33,12 @@ class GenerationDetailScreen extends StatefulWidget {
     this.foodAnalysis,
     this.captions,
   }) : assert(
-    (generation != null) || (originalImage != null && foodAnalysis != null && captions != null),
-    'Either generation or (originalImage, foodAnalysis, captions) must be provided',
-  );
+         (generation != null) ||
+             (originalImage != null &&
+                 foodAnalysis != null &&
+                 captions != null),
+         'Either generation or (originalImage, foodAnalysis, captions) must be provided',
+       );
 
   @override
   State<GenerationDetailScreen> createState() => _GenerationDetailScreenState();
@@ -64,7 +65,7 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
+
     if (_isNewlyGenerated) {
       _saveToDatabase();
     } else {
@@ -85,12 +86,13 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
 
   FoodAnalysis _getFoodAnalysis() {
     final generation = _savedGeneration ?? widget.generation;
-    return widget.foodAnalysis ?? FoodAnalysis(
-      foodName: generation!.foodName,
-      cuisine: generation.cuisine,
-      description: generation.description,
-      ingredients: generation.ingredients,
-    );
+    return widget.foodAnalysis ??
+        FoodAnalysis(
+          foodName: generation!.foodName,
+          cuisine: generation.cuisine,
+          description: generation.description,
+          ingredients: generation.ingredients,
+        );
   }
 
   String _getCurrentCaption() {
@@ -129,7 +131,8 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
     File? imageToShare;
 
     if (generation != null) {
-      imageToShare = _selectedImageIndex > 0 &&
+      imageToShare =
+          _selectedImageIndex > 0 &&
               generation.enhancedImagePaths.isNotEmpty &&
               _selectedImageIndex <= generation.enhancedImagePaths.length
           ? File(generation.enhancedImagePaths[_selectedImageIndex - 1])
@@ -152,10 +155,9 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
       return;
     }
 
-    await Share.shareXFiles(
-      [XFile(imageToShare.path)],
-      text: _getFullCaption(),
-    );
+    await Share.shareXFiles([
+      XFile(imageToShare.path),
+    ], text: _getFullCaption());
   }
 
   Future<void> _saveImage() async {
@@ -179,13 +181,20 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalImagePath = path.join(imagesDir.path, 'original_$timestamp.jpg');
+      final originalImagePath = path.join(
+        imagesDir.path,
+        'original_$timestamp.jpg',
+      );
       await widget.originalImage!.copy(originalImagePath);
 
       List<String> enhancedImagePaths = [];
-      if (widget.enhancedImageBytes != null && widget.enhancedImageBytes!.isNotEmpty) {
+      if (widget.enhancedImageBytes != null &&
+          widget.enhancedImageBytes!.isNotEmpty) {
         for (int i = 0; i < widget.enhancedImageBytes!.length; i++) {
-          final enhancedPath = path.join(imagesDir.path, 'enhanced_${timestamp}_$i.jpg');
+          final enhancedPath = path.join(
+            imagesDir.path,
+            'enhanced_${timestamp}_$i.jpg',
+          );
           final enhancedFile = File(enhancedPath);
           await enhancedFile.writeAsBytes(widget.enhancedImageBytes![i]);
           enhancedImagePaths.add(enhancedPath);
@@ -228,7 +237,10 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
 
       List<String> reelPaths = [];
       for (int i = 0; i < reelBytesList.length; i++) {
-        final reelPath = path.join(reelsDir.path, 'reel_${_savedGeneration!.id}_${DateTime.now().millisecondsSinceEpoch}_$i.mp4');
+        final reelPath = path.join(
+          reelsDir.path,
+          'reel_${_savedGeneration!.id}_${DateTime.now().millisecondsSinceEpoch}_$i.mp4',
+        );
         final reelFile = File(reelPath);
         await reelFile.writeAsBytes(reelBytesList[i]);
         reelPaths.add(reelPath);
@@ -263,7 +275,9 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
             _dialogSetState = setDialogState;
             return AlertDialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -284,15 +298,19 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                       ),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(Icons.camera_alt, color: Colors.white, size: 32),
+                    child: Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 32,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(
                     _currentStep == PostingStep.success
                         ? '🎉 Posted!'
                         : _currentStep == PostingStep.failed
-                            ? '❌ Failed'
-                            : 'Posting to Instagram',
+                        ? '❌ Failed'
+                        : 'Posting to Instagram',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -309,20 +327,29 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                         _currentStep == PostingStep.failed
                             ? Colors.red
                             : _currentStep == PostingStep.success
-                                ? Colors.green
-                                : AppColors.primary,
+                            ? Colors.green
+                            : AppColors.primary,
                       ),
                       minHeight: 8,
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildStepRow(PostingStep.uploadingImage, Icons.cloud_upload_outlined),
+                  _buildStepRow(
+                    PostingStep.uploadingImage,
+                    Icons.cloud_upload_outlined,
+                  ),
                   const SizedBox(height: 12),
                   _buildStepRow(PostingStep.sendingToN8n, Icons.sync),
                   const SizedBox(height: 12),
-                  _buildStepRow(PostingStep.postingToInstagram, Icons.send_rounded),
+                  _buildStepRow(
+                    PostingStep.postingToInstagram,
+                    Icons.send_rounded,
+                  ),
                   const SizedBox(height: 12),
-                  _buildStepRow(PostingStep.success, Icons.check_circle_outline),
+                  _buildStepRow(
+                    PostingStep.success,
+                    Icons.check_circle_outline,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     _currentStep.description,
@@ -340,7 +367,8 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
 
     try {
       final generation = _savedGeneration ?? widget.generation!;
-      final imageToPost = _selectedImageIndex > 0 &&
+      final imageToPost =
+          _selectedImageIndex > 0 &&
               _selectedImageIndex <= generation.enhancedImagePaths.length
           ? File(generation.enhancedImagePaths[_selectedImageIndex - 1])
           : File(generation.originalImagePath);
@@ -405,8 +433,8 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
             color: isCompleted
                 ? Colors.green.withOpacity(0.1)
                 : isActive
-                    ? AppColors.primary.withOpacity(0.1)
-                    : Colors.grey.shade100,
+                ? AppColors.primary.withOpacity(0.1)
+                : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(8),
           ),
           child: isCompleted
@@ -420,7 +448,9 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
             style: TextStyle(
               fontSize: 14,
               fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              color: isActive || isCompleted ? Colors.black87 : Colors.grey.shade400,
+              color: isActive || isCompleted
+                  ? Colors.black87
+                  : Colors.grey.shade400,
             ),
           ),
         ),
@@ -445,60 +475,66 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
   }
 
   Future<void> _generateReels() async {
-    setState(() {
-      _reelGenerationState = ReelGenerationState.generating;
-    });
-
-    try {
-      final generation = _savedGeneration ?? widget.generation;
-      if (generation == null) {
-        throw Exception('Generation not available for reel saving');
-      }
-
-      List<File> images = [];
-      // If there are enhanced images, use them; otherwise, use the original image
-      for (String path in generation.enhancedImagePaths.isNotEmpty
-          ? generation.enhancedImagePaths
-          : [generation.originalImagePath]) {
-        images.add(File(path));
-      }
-
-      final reels = await _aiService.generateReels(images, _getFoodAnalysis());
-      
-      if (reels.isNotEmpty) 
-      {
-        bool saveSuccess = await _saveReelsToDatabase(reels);
-        
-
-        setState(() 
-        {
-          _reelGenerationState = saveSuccess ? ReelGenerationState.generated : ReelGenerationState.notGenerated;
-        });
-        
-      }
-      else
-      {
-        // If failed, set state back to not generated and show error message
-        setState(() 
-        {
-          _reelGenerationState = ReelGenerationState.notGenerated;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to generate reels. Please try again.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-
-      
-    } catch (e) {
-      print('[ERROR] Reel generation error: $e');
-      setState(() {
-        _reelGenerationState = ReelGenerationState.notGenerated;
-      });
+    final generation = _savedGeneration ?? widget.generation;
+    if (generation == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Generation not available')));
+      return;
     }
+
+    if (BackgroundReelService().isGenerating(generation.id!)) {
+      return;
+    }
+
+    List<File> images = [];
+    for (String path
+        in generation.enhancedImagePaths.isNotEmpty
+            ? generation.enhancedImagePaths
+            : [generation.originalImagePath]) {
+      images.add(File(path));
+    }
+
+    BackgroundReelService().generateReelsFor(
+      generation,
+      _getFoodAnalysis(),
+      images,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Reel generating... Please wait around 3 minutes and check back later.',
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _navigateToPosterGenerator(SavedGeneration generation) {
+    final imageFile = File(
+      _selectedImageIndex > 0 &&
+              generation.enhancedImagePaths.isNotEmpty &&
+              _selectedImageIndex <= generation.enhancedImagePaths.length
+          ? generation.enhancedImagePaths[_selectedImageIndex - 1]
+          : generation.originalImagePath,
+    );
+
+    Uint8List? imageBytes;
+    if (imageFile.existsSync()) {
+      imageBytes = imageFile.readAsBytesSync();
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PosterGeneratorScreen(
+          initialTemplate: PosterTemplate.flashSale,
+          initialImageBytes: imageBytes,
+          initialItemName: generation.foodName,
+        ),
+      ),
+    );
   }
 
   @override
@@ -507,9 +543,7 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
     final dateFormat = DateFormat('MMMM d, y \'at\' h:mm a');
 
     if (generation == null) {
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final imageFile = File(
@@ -531,7 +565,7 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
               icon: const Icon(Icons.download_rounded),
               onPressed: _saveImage,
               tooltip: 'Save Image',
-            )
+            ),
         ],
       ),
       body: Stack(
@@ -566,9 +600,11 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _buildToggleButton('Original', 0),
-                            for (int i = 0;
-                                i < generation.enhancedImagePaths.length;
-                                i++)
+                            for (
+                              int i = 0;
+                              i < generation.enhancedImagePaths.length;
+                              i++
+                            )
                               _buildToggleButton('Enhanced ${i + 1}', i + 1),
                           ],
                         ),
@@ -588,9 +624,7 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
               return Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black12,
@@ -599,269 +633,321 @@ class _GenerationDetailScreenState extends State<GenerationDetailScreen>
                     ),
                   ],
                 ),
-                child: Column(
+                child: ListView(
+                  controller: scrollController,
+                  padding: EdgeInsets.zero,
                   children: [
                     // Drag handle
-                    Container(
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView(
-                        controller: scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        children: [
-                          Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              generation.foodName,
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              generation.cuisine,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              dateFormat.format(generation.createdAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        width: 40,
+                        height: 4,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome_rounded,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'AI Generated',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: AppColors.primary,
-                    indicatorWeight: 3,
-                    onTap: (_) => setState(() {}),
-                    tabs: const [
-                      Tab(text: 'English'),
-                      Tab(text: 'Malay'),
-                      Tab(text: 'Mandarin'),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _getCurrentCaption(),
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
-                      color: AppColors.onSurface,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: generation.hashtags
-                        .map((tag) => Chip(
-                              label: Text(
-                                tag,
-                                style: const TextStyle(fontSize: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      generation.foodName,
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      generation.cuisine,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      dateFormat.format(generation.createdAt),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              backgroundColor:
-                                  AppColors.primary.withOpacity(0.1),
-                              labelStyle: TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'AI Generated',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _isPostingToInstagram ? null : _postToInstagram,
-                          icon: _isPostingToInstagram
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<Color>(
-                                            Colors.white),
-                                  ),
-                                )
-                              : Icon(Icons.camera_alt_rounded, size: 18),
-                          label: Text(_isPostingToInstagram
-                              ? 'Posting...'
-                              : 'Post to Instagram'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TabBar(
+                            controller: _tabController,
+                            labelColor: AppColors.primary,
+                            unselectedLabelColor: Colors.grey,
+                            indicatorColor: AppColors.primary,
+                            indicatorWeight: 3,
+                            onTap: (_) => setState(() {}),
+                            tabs: const [
+                              Tab(text: 'English'),
+                              Tab(text: 'Malay'),
+                              Tab(text: 'Mandarin'),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _getCurrentCaption(),
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.5,
+                              color: AppColors.onSurface,
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
-                  Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _reelGenerationState == ReelGenerationState.generating
-                              ? null
-                              : (_reelGenerationState == ReelGenerationState.generated
-                                  ? () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => ReelGenerationScreen(
-                                          reelPaths: generation.reelPaths,
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: generation.hashtags
+                                .map(
+                                  (tag) => Chip(
+                                    label: Text(
+                                      tag,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    backgroundColor: AppColors.primary
+                                        .withOpacity(0.1),
+                                    labelStyle: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              AnimatedBuilder(
+                                animation: BackgroundReelService(),
+                                builder: (context, child) {
+                                  final isBgGenerating = BackgroundReelService()
+                                      .isGenerating(generation.id!);
+                                  final hasReels =
+                                      generation.reelPaths.isNotEmpty;
+
+                                  return Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: isBgGenerating
+                                          ? null
+                                          : (hasReels
+                                                ? () {
+                                                    Navigator.of(context).push(
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            ReelGenerationScreen(
+                                                              reelPaths:
+                                                                  generation
+                                                                      .reelPaths,
+                                                            ),
+                                                      ),
+                                                    );
+                                                  }
+                                                : _generateReels),
+                                      icon: isBgGenerating
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(Colors.white),
+                                              ),
+                                            )
+                                          : Icon(
+                                              hasReels
+                                                  ? Icons
+                                                        .play_circle_outline_rounded
+                                                  : Icons.video_library_rounded,
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        isBgGenerating
+                                            ? 'Generating...'
+                                            : hasReels
+                                            ? 'View Reels'
+                                            : 'Gen Reels',
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 16,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                       ),
-                                    );
-                                  }
-                                  : _generateReels),
-                          icon: _reelGenerationState == ReelGenerationState.generating
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<Color>(
-                                            Colors.white),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () =>
+                                      _navigateToPosterGenerator(generation),
+                                  icon: const Icon(
+                                    Icons.art_track_rounded,
+                                    size: 18,
                                   ),
-                                )
-                              : Icon(
-                                  _reelGenerationState == ReelGenerationState.generated
-                                      ? Icons.play_circle_outline_rounded
-                                      : Icons.video_library_rounded,
-                                  size: 18),
-                          label: Text(
-                            _reelGenerationState == ReelGenerationState.generating
-                                ? 'Generating Reels...'
-                                : _reelGenerationState == ReelGenerationState.generated
-                                    ? 'View Generated Reels'
-                                    : 'Generate Reels',
+                                  label: const Text('Gen Poster'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _isPostingToInstagram
+                                  ? null
+                                  : _postToInstagram,
+                              icon: _isPostingToInstagram
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                  : Icon(Icons.camera_alt_rounded, size: 18),
+                              label: Text(
+                                _isPostingToInstagram
+                                    ? 'Posting...'
+                                    : 'Post to Instagram',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _copyToClipboard,
-                          icon: const Icon(Icons.copy_rounded, size: 18),
-                          label: const Text('Copy Caption'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primary,
-                            side: BorderSide(color: AppColors.primary),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _copyToClipboard,
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Copy Caption'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primary,
+                                    side: BorderSide(color: AppColors.primary),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _sharePost,
+                                  icon: const Icon(
+                                    Icons.share_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Share'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 20),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _sharePost,
-                          icon: const Icon(Icons.share_rounded, size: 18),
-                          label: const Text('Share'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ],
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
-          ),
-      ],
-    ),
-  );
-  },
-),
         ],
       ),
     );

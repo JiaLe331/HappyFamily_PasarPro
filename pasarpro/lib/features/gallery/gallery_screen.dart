@@ -7,6 +7,7 @@ import '../../models/saved_generation.dart';
 import '../../models/saved_poster.dart';
 import '../../services/database_service.dart';
 import '../camera/post_image_screen.dart';
+import '../../services/background_reel_service.dart';
 import 'generation_detail_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -356,27 +357,94 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ),
 
-              // Type tag
+              // Type tag & Reel indicator
               Positioned(
                 top: 8,
                 left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isPoster ? 'Poster' : 'Photo',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                right: 8,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        isPoster ? 'Poster' : 'Photo',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (isGeneration)
+                      AnimatedBuilder(
+                        animation: BackgroundReelService(),
+                        builder: (context, child) {
+                          final isBgGenerating = BackgroundReelService()
+                              .isGenerating((item as SavedGeneration).id!);
+                          final hasReels = item.reelPaths.isNotEmpty;
+
+                          if (isBgGenerating) {
+                            return Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              ),
+                            );
+                          } else if (hasReels) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade400,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.play_circle_outline_rounded,
+                                    color: Colors.white,
+                                    size: 10,
+                                  ),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    'Reels',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                  ],
                 ),
               ),
             ],

@@ -56,8 +56,10 @@ class AppTheme {
           color: AppColors.onSurface,
         ),
         bodyLarge: GoogleFonts.outfit(fontSize: 16, color: AppColors.onSurface),
-        bodyMedium:
-            GoogleFonts.outfit(fontSize: 14, color: AppColors.onSurface),
+        bodyMedium: GoogleFonts.outfit(
+          fontSize: 14,
+          color: AppColors.onSurface,
+        ),
         bodySmall: GoogleFonts.outfit(
           fontSize: 12,
           color: AppColors.onSurfaceVariant,
@@ -92,6 +94,11 @@ class AppTheme {
         foregroundColor: AppColors.onPrimary,
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+
+      // SnackBar
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

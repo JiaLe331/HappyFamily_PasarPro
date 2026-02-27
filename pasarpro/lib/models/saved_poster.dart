@@ -1,4 +1,4 @@
-import 'package:pasarpro/services/poster_service.dart';
+import '../services/poster_service.dart';
 
 /// Model for a saved generated poster
 class SavedPoster {
