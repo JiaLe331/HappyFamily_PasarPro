@@ -6,17 +6,21 @@ class AppColors {
 
   // Brand colors
   static const Color primary = Color(0xFFFF8252); // Softer warm orange
-  static const Color primarySoft =
-      Color(0xFFFFA585); // Softer orange for gradients
-  static const Color secondary =
-      Color(0xFF004E3E); // Deep green - sustainability
-  static const Color secondarySoft =
-      Color(0xFF0A6B59); // Richer green for gradients
+  static const Color primarySoft = Color(
+    0xFFFFA585,
+  ); // Softer orange for gradients
+  static const Color secondary = Color(
+    0xFF004E3E,
+  ); // Deep green - sustainability
+  static const Color secondarySoft = Color(
+    0xFF0A6B59,
+  ); // Richer green for gradients
   static const Color accent = Color(0xFFFFB81C); // Gold - premium feel
 
   // Surface colors
-  static const Color surface =
-      Color(0xFFFAFAFA); // Cooler, very light gray to let white cards pop
+  static const Color surface = Color(
+    0xFFFAFAFA,
+  ); // Cooler, very light gray to let white cards pop
   static const Color surfaceDark = Color(0xFF1A1A1A);
   static const Color cardWhite = Colors.white;
 
