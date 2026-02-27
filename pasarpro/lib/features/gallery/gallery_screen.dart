@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:gal/gal.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/saved_generation.dart';
+import '../../models/saved_poster.dart';
 import '../../services/database_service.dart';
 import '../camera/post_image_screen.dart';
 import 'generation_detail_screen.dart';
@@ -16,61 +18,81 @@ class GalleryScreen extends StatefulWidget {
 
 class _GalleryScreenState extends State<GalleryScreen> {
   final DatabaseService _databaseService = DatabaseService();
-  List<SavedGeneration> _generations = [];
+  List<dynamic> _allItems = [];
   bool _isLoading = true;
   String _selectedFilter = 'All';
 
   @override
   void initState() {
     super.initState();
-    _loadGenerations();
+    _loadItems();
   }
 
-  Future<void> _loadGenerations() async {
+  Future<void> _loadItems() async {
     setState(() => _isLoading = true);
     try {
       final generations = await _databaseService.getAllGenerations();
+      final posters = await _databaseService.getAllPosters();
+
+      final List<dynamic> combined = [...generations, ...posters];
+      // Sort by newest first
+      combined.sort(
+        (a, b) => (b.createdAt as DateTime).compareTo(a.createdAt as DateTime),
+      );
+
       setState(() {
-        _generations = generations;
+        _allItems = combined;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading gallery: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading gallery: $e')));
       }
     }
   }
 
-  Future<void> _deleteGeneration(int id) async {
+  Future<void> _deleteItem(dynamic item) async {
     try {
-      await _databaseService.deleteGeneration(id);
-      await _loadGenerations();
+      if (item is SavedGeneration) {
+        await _databaseService.deleteGeneration(item.id!);
+      } else if (item is SavedPoster) {
+        await _databaseService.deletePoster(item.id!);
+      }
+      await _loadItems();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Generation deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Item deleted')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Apply filtering
+    List<dynamic> filteredItems = _allItems;
+    if (_selectedFilter == 'Enhanced Photos') {
+      filteredItems = _allItems.whereType<SavedGeneration>().toList();
+    } else if (_selectedFilter == 'Generated Posters') {
+      filteredItems = _allItems.whereType<SavedPoster>().toList();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gallery'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadGenerations,
+            onPressed: _loadItems,
             tooltip: 'Refresh',
           ),
         ],
@@ -86,20 +108,31 @@ class _GalleryScreenState extends State<GalleryScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _generations.isEmpty
+              filteredItems.isEmpty
                   ? 'No content yet'
-                  : '${_generations.length} ${_generations.length == 1 ? 'item' : 'items'}',
+                  : '${filteredItems.length} ${filteredItems.length == 1 ? 'item' : 'items'}',
               style: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
 
             // Filter chips
-            Row(
-              children: [
-                _buildFilterChip('All', _selectedFilter == 'All'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Recent', _selectedFilter == 'Recent'),
-              ],
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildFilterChip('All', _selectedFilter == 'All'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    'Enhanced Photos',
+                    _selectedFilter == 'Enhanced Photos',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    'Generated Posters',
+                    _selectedFilter == 'Generated Posters',
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -107,9 +140,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _generations.isEmpty
-                      ? _buildEmptyState()
-                      : _buildGalleryGrid(),
+                  : filteredItems.isEmpty
+                  ? _buildEmptyState()
+                  : _buildGalleryGrid(filteredItems),
             ),
           ],
         ),
@@ -155,10 +188,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           const SizedBox(height: 8),
           Text(
             'Create your first marketing material',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -172,10 +202,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -186,7 +213,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  Widget _buildGalleryGrid() {
+  Widget _buildGalleryGrid(List<dynamic> items) {
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -194,27 +221,57 @@ class _GalleryScreenState extends State<GalleryScreen> {
         mainAxisSpacing: 12,
         childAspectRatio: 0.75,
       ),
-      itemCount: _generations.length,
+      itemCount: items.length,
       itemBuilder: (context, index) {
-        final generation = _generations[index];
-        return _buildGalleryCard(generation);
+        final item = items[index];
+        return _buildGalleryCard(item);
       },
     );
   }
 
-  Widget _buildGalleryCard(SavedGeneration generation) {
-    final imageFile = File(generation.originalImagePath);
+  Widget _buildGalleryCard(dynamic item) {
+    final isGeneration = item is SavedGeneration;
+    final isPoster = item is SavedPoster;
+
+    final imageFile = File(
+      isPoster ? item.posterImagePath : item.originalImagePath,
+    );
     final dateFormat = DateFormat('MMM d, y');
+
+    final title = isPoster ? item.itemName : item.foodName;
+    final subtitle = isPoster
+        ? 'Template: ${item.template.name}'
+        : item.cuisine;
+    final createdAt = item.createdAt;
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                GenerationDetailScreen(generation: generation),
-          ),
-        ).then((_) => _loadGenerations()); // Refresh after returning
+        if (isGeneration) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => GenerationDetailScreen(generation: item),
+            ),
+          ).then((_) => _loadItems()); // Refresh after returning
+        } else if (isPoster) {
+          // You could build a specific poster viewer, but for now we route to a read-only preview screen
+          // Alternatively, simply view image full screen.
+          // Reusing PosterPreviewScreen might be complex since we don't have the explicit bytes easily or we'd need a separate static view.
+          // For now, let's just make them pop-up an image viewer dialog
+          showDialog(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.transparent,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.file(imageFile, fit: BoxFit.contain),
+              ),
+            ),
+          );
+        }
+      },
+      onLongPress: () {
+        _showOptionsBottomSheet(item, title, imageFile, isPoster);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -250,10 +307,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.7),
-                    ],
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
                   ),
                 ),
               ),
@@ -270,7 +324,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        generation.foodName,
+                        title,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -281,7 +335,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        generation.cuisine,
+                        subtitle,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
@@ -291,7 +345,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        dateFormat.format(generation.createdAt),
+                        dateFormat.format(createdAt),
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 11,
@@ -302,24 +356,25 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ),
 
-              // Delete button
+              // Type tag
               Positioned(
                 top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: () {
-                    _showDeleteConfirmation(generation);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.delete_outline_rounded,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isPoster ? 'Poster' : 'Photo',
+                    style: const TextStyle(
                       color: Colors.white,
-                      size: 18,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -331,13 +386,104 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  void _showDeleteConfirmation(SavedGeneration generation) {
+  void _showOptionsBottomSheet(
+    dynamic item,
+    String title,
+    File imageFile,
+    bool isPoster,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bottomSheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Divider(),
+              if (isPoster)
+                ListTile(
+                  leading: Icon(
+                    Icons.download_rounded,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    'Save to device',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(bottomSheetContext);
+                    await _saveToDevice(imageFile);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
+                title: const Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(bottomSheetContext);
+                  _showDeleteConfirmation(item, title);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveToDevice(File imageFile) async {
+    try {
+      await Gal.putImage(imageFile.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved to device gallery')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save to device: $e')));
+      }
+    }
+  }
+
+  void _showDeleteConfirmation(dynamic item, String title) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Generation?'),
-        content:
-            Text('Are you sure you want to delete "${generation.foodName}"?'),
+        title: const Text('Delete Item?'),
+        content: Text('Are you sure you want to delete "$title"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -346,7 +492,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _deleteGeneration(generation.id!);
+              _deleteItem(item);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
