@@ -26,7 +26,7 @@ class AppTheme {
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.poppins(
+        titleTextStyle: GoogleFonts.outfit(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: AppColors.onPrimary,
@@ -34,30 +34,33 @@ class AppTheme {
       ),
 
       // Typography
-      textTheme: GoogleFonts.poppinsTextTheme().copyWith(
-        headlineLarge: GoogleFonts.poppins(
+      textTheme: GoogleFonts.outfitTextTheme().copyWith(
+        headlineLarge: GoogleFonts.outfit(
           fontSize: 32,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
         ),
-        headlineMedium: GoogleFonts.poppins(
+        headlineMedium: GoogleFonts.outfit(
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
         ),
-        titleLarge: GoogleFonts.poppins(
+        titleLarge: GoogleFonts.outfit(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
-        titleMedium: GoogleFonts.poppins(
+        titleMedium: GoogleFonts.outfit(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
-        bodyLarge: GoogleFonts.inter(fontSize: 16, color: AppColors.onSurface),
-        bodyMedium: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
-        bodySmall: GoogleFonts.inter(
+        bodyLarge: GoogleFonts.outfit(fontSize: 16, color: AppColors.onSurface),
+        bodyMedium: GoogleFonts.outfit(
+          fontSize: 14,
+          color: AppColors.onSurface,
+        ),
+        bodySmall: GoogleFonts.outfit(
           fontSize: 12,
           color: AppColors.onSurfaceVariant,
         ),
@@ -78,11 +81,11 @@ class AppTheme {
         unselectedItemColor: AppColors.onSurfaceVariant,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
-        selectedLabelStyle: GoogleFonts.poppins(
+        selectedLabelStyle: GoogleFonts.outfit(
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
-        unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
+        unselectedLabelStyle: GoogleFonts.outfit(fontSize: 11),
       ),
 
       // Floating Action Button
@@ -91,6 +94,11 @@ class AppTheme {
         foregroundColor: AppColors.onPrimary,
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+
+      // SnackBar
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

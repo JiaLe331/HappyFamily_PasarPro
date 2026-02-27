@@ -18,7 +18,7 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -64,19 +64,20 @@ class HomeScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const KiraKiraScreen()),
       ),
       child: Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF004E3E), Color(0xFF00897B)],
+            colors: [AppColors.secondarySoft, AppColors.secondary],
+            stops: [0.0, 1.0],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF004E3E).withOpacity(0.4),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
+              color: AppColors.secondary.withOpacity(0.25),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -88,7 +89,8 @@ class HomeScreen extends StatelessWidget {
                 color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.mic_rounded, color: Colors.white, size: 28),
+              child:
+                  const Icon(Icons.mic_rounded, color: Colors.white, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -127,19 +129,20 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildSmartCallToAction(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.accent],
+        gradient: const LinearGradient(
+          colors: [AppColors.primarySoft, AppColors.primary],
+          stops: [0.0, 1.0],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.primary.withOpacity(0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -244,28 +247,33 @@ class HomeScreen extends StatelessWidget {
     required String value,
     required Color color,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppColors.onSurface,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   }
@@ -276,54 +284,57 @@ class HomeScreen extends StatelessWidget {
       children: [
         Text('Viral Forecast', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.trending_up_rounded,
-                    color: AppColors.accent,
-                    size: 32,
-                  ),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.outline.withOpacity(0.5)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '#PaduBeb is trending',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.onSurface,
-                        ),
+                child: const Icon(
+                  Icons.trending_up_rounded,
+                  color: AppColors.accent,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '#PaduBeb is trending',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Use this hashtag for 50% more reach',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.onSurfaceVariant,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Use this hashtag for 50% more reach',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.onSurfaceVariant,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: AppColors.onSurfaceVariant,
-                  size: 16,
-                ),
-              ],
-            ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: AppColors.onSurfaceVariant,
+                size: 16,
+              ),
+            ],
           ),
         ),
       ],
