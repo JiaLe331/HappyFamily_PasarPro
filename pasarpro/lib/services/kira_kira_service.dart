@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
@@ -237,6 +238,104 @@ All three fields (expense, revenue, profit) are required and must be numbers.
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Gemini Audio Transcription (replaces Android System STT)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Transcribes an audio [file] using Gemini's native multimodal API.
+  ///
+  /// This replaces the Android system `speech_to_text` package entirely.
+  /// Gemini understands Malaysian English, Manglish, and Bahasa Malaysia
+  /// out of the box — far more accurate than Android's `en_US` STT engine.
+  ///
+  /// Supported formats: m4a, wav, ogg, mp3, flac, webm.
+  /// The audio is base64-encoded into an inline data part (no upload needed
+  /// for files under ~20 MB, which easily covers 30-second voice clips).
+  Future<String> transcribeAudio(File audioFile) async {
+    final audioBytes = await audioFile.readAsBytes();
+    final base64Audio = base64Encode(audioBytes);
+
+    // Derive MIME type from file extension
+    final ext = audioFile.path.split('.').last.toLowerCase();
+    final mimeType = switch (ext) {
+      'm4a' => 'audio/mp4',
+      'wav' => 'audio/wav',
+      'ogg' => 'audio/ogg',
+      'mp3' => 'audio/mpeg',
+      'flac' => 'audio/flac',
+      'webm' => 'audio/webm',
+      _ => 'audio/mp4', // default for Android record package
+    };
+
+    final url = Uri(
+      scheme: 'https',
+      host: _geminiHost,
+      path: '/v1beta/models/$_geminiModel:generateContent',
+      queryParameters: {'key': _apiKey},
+    );
+
+    final body = jsonEncode({
+      'system_instruction': {
+        'parts': [
+          {
+            'text':
+                'You are a highly accurate speech-to-text transcription AI '
+                'specialising in Malaysian English, Manglish, and Bahasa Malaysia. '
+                'The speaker is a Malaysian hawker stall owner. '
+                'Common terms they use: RM, ringgit, sen, beli, jual, untung, modal, '
+                'laksa, nasi lemak, mee, ayam, ikan, char kway teow, teh tarik, kopi. '
+                'Transcribe EXACTLY what you hear. Do NOT summarise, translate, or '
+                'add any punctuation beyond commas and periods. '
+                'If the speaker mixes Malay and English, transcribe both as spoken. '
+                'Output ONLY the plain transcribed text, nothing else.'
+          }
+        ],
+      },
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              // Inline audio data — no separate upload step required
+              'inline_data': {
+                'mime_type': mimeType,
+                'data': base64Audio,
+              }
+            },
+            {'text': 'Transcribe this audio recording accurately.'}
+          ],
+        }
+      ],
+      'generationConfig': {
+        'temperature': 0.0,
+        'maxOutputTokens': 512,
+        'candidateCount': 1,
+        'thinkingConfig': {'thinkingBudget': 0},
+      },
+    });
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Gemini transcription error ${response.statusCode}: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final text = data['candidates']?[0]?['content']?['parts']?[0]?['text']
+        as String?;
+
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('Empty transcription from Gemini');
+    }
+
+    return text.trim();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Gemini AI Studio Parsing
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -450,5 +549,261 @@ All three fields (expense, revenue, profit) are required and must be numbers.
         .get();
 
     return snapshot.docs.map(LedgerEntry.fromFirestore).toList();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Delete Entry
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Deletes a ledger entry by its Firestore document ID.
+  Future<void> deleteEntry(String id) async {
+    await _db.collection(_collection).doc(id).delete();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fetch Entries for a Specific Date
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Fetches all entries for a specific [date], newest first.
+  Future<List<LedgerEntry>> fetchEntriesForDate(DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    final snapshot = await _db
+        .collection(_collection)
+        .where('timestamp',
+            isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch)
+        .where('timestamp',
+            isLessThan: endOfDay.millisecondsSinceEpoch)
+        .orderBy('timestamp', descending: true)
+        .get();
+
+    return snapshot.docs.map(LedgerEntry.fromFirestore).toList();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Receipt OCR (Snap-Ledger)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// OCR system instruction for parsing handwritten / printed receipts.
+  static const String _receiptOcrInstruction = """
+You are a receipt and invoice OCR specialist for PasarPro, a Malaysian hawker app.
+
+The user will send you a photo of a handwritten or printed receipt, invoice,
+or note listing items with prices (in Malaysian Ringgit, RM / MYR).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR TASK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Read ALL line items from the receipt, even if the handwriting is messy.
+2. Classify each line as either an EXPENSE or REVENUE item:
+   - EXPENSE: items purchased / bought / ingredients / supplies / kos / modal
+   - REVENUE: items sold / jualan / sales / income
+   - If the receipt looks like a PURCHASE receipt (buying supplies), all items are EXPENSES.
+   - If the receipt looks like a SALES record, all items are REVENUE.
+3. Sum up all EXPENSE items → total expense
+4. Sum up all REVENUE items → total revenue
+5. Calculate profit = total revenue − total expense
+6. Create a short transcript describing the receipt contents in one line.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT (strict JSON only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "expense": 0.0,
+  "revenue": 0.0,
+  "profit": 0.0,
+  "transcript": "one-line summary of the receipt"
+}
+
+RULES:
+• Output ONLY valid JSON. No markdown, no explanations.
+• All amounts are in RM (Malaysian Ringgit).
+• If you cannot read certain parts, make your best estimate and note it in transcript.
+• If the receipt is not readable at all, return all zeros and transcript = "Could not read receipt".
+""";
+
+  /// Parses a receipt image using Gemini Vision OCR.
+  ///
+  /// Returns a map with keys: expense, revenue, profit (double), transcript (String).
+  Future<Map<String, dynamic>> parseReceiptImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(bytes);
+
+    // Determine mime type from extension
+    final ext = imageFile.path.split('.').last.toLowerCase();
+    final mimeType = switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'gif' => 'image/gif',
+      _ => 'image/jpeg',
+    };
+
+    final url = Uri.parse(
+        'https://$_geminiHost/v1beta/models/$_geminiModel:generateContent?key=$_apiKey');
+
+    final body = jsonEncode({
+      'system_instruction': {
+        'parts': [
+          {'text': _receiptOcrInstruction}
+        ]
+      },
+      'contents': [
+        {
+          'parts': [
+            {
+              'inline_data': {
+                'mime_type': mimeType,
+                'data': base64Image,
+              }
+            },
+            {
+              'text': 'Parse this receipt and extract the financial data as JSON.'
+            }
+          ]
+        }
+      ],
+      'generationConfig': {
+        'temperature': 0,
+        'responseMimeType': 'application/json',
+      },
+    });
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Receipt OCR API error ${response.statusCode}: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    // Extract the generated text from the Gemini response
+    final candidates = data['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('Receipt OCR: no candidates in response');
+    }
+
+    final content = candidates[0]['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) {
+      throw Exception('Receipt OCR: no parts in response');
+    }
+
+    final text = parts[0]['text'] as String? ?? '';
+
+    // Parse the JSON response
+    final parsed = jsonDecode(text) as Map<String, dynamic>;
+    return {
+      'expense': (parsed['expense'] as num?)?.toDouble() ?? 0.0,
+      'revenue': (parsed['revenue'] as num?)?.toDouble() ?? 0.0,
+      'profit': (parsed['profit'] as num?)?.toDouble() ?? 0.0,
+      'transcript': parsed['transcript'] as String? ?? 'Receipt scanned',
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Itemized Breakdown (on-demand re-parsing)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Re-parses a [rawTranscript] to produce an itemized breakdown table.
+  ///
+  /// Returns a list of maps, each with:
+  ///   - `item` (String): e.g. "Chicken", "Nasi Lemak"
+  ///   - `qty` (int): quantity, default 1
+  ///   - `unitPrice` (double): price per unit in RM
+  ///   - `total` (double): qty × unitPrice
+  ///   - `type` (String): "expense" or "revenue"
+  Future<List<Map<String, dynamic>>> getItemizedBreakdown(
+      String rawTranscript) async {
+    final url = Uri.parse(
+        'https://$_geminiHost/v1beta/models/$_geminiModel:generateContent?key=$_apiKey');
+
+    final body = jsonEncode({
+      'system_instruction': {
+        'parts': [
+          {
+            'text': '''
+You are a financial line-item parser for PasarPro, a Malaysian hawker app.
+
+Given a raw transcript of a hawker's voice entry or receipt scan, extract
+EVERY SINGLE individual item mentioned into a separate row.
+
+CRITICAL RULES:
+• NEVER group items together as "Various Ingredients" or "Assorted Items".
+  If the transcript mentions "kuey teow, eggs, prawns, cooking oil, chilli paste",
+  you MUST create 5 separate rows — one for each ingredient.
+• If only a total price is given for multiple items, estimate a reasonable
+  price split across all named items.
+• "type" must be either "expense" or "revenue"
+• expense = things BOUGHT / purchased / ingredients / supplies / kos / modal
+• revenue = things SOLD / jualan / sales / income
+• If quantity is not mentioned, default to 1
+• If unitPrice is not mentioned but total is, distribute the total equally
+  across the items or estimate based on typical Malaysian market prices.
+• All amounts are in RM (Malaysian Ringgit)
+• Output ONLY a valid JSON array. No markdown, no explanations.
+
+OUTPUT FORMAT (strict JSON array):
+[
+  {"item": "Kuey Teow (flat noodles)", "qty": 5, "unitPrice": 3.50, "total": 17.50, "type": "expense"},
+  {"item": "Eggs", "qty": 30, "unitPrice": 0.45, "total": 13.50, "type": "expense"},
+  {"item": "Prawns (kg)", "qty": 2, "unitPrice": 35.00, "total": 70.00, "type": "expense"},
+  {"item": "Char Kuey Teow (plate)", "qty": 30, "unitPrice": 8.00, "total": 240.00, "type": "revenue"}
+]
+'''
+          }
+        ]
+      },
+      'contents': [
+        {
+          'parts': [
+            {
+              'text':
+                  'Extract itemized breakdown from this hawker record:\n\n"$rawTranscript"'
+            }
+          ]
+        }
+      ],
+      'generationConfig': {
+        'temperature': 0,
+        'responseMimeType': 'application/json',
+      },
+    });
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Breakdown API error ${response.statusCode}: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final candidates = data['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('Breakdown: no candidates');
+    }
+
+    final content = candidates[0]['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    final text = parts?[0]['text'] as String? ?? '[]';
+
+    final parsed = jsonDecode(text) as List;
+    return parsed
+        .map((e) => {
+              'item': e['item'] as String? ?? 'Item',
+              'qty': (e['qty'] as num?)?.toInt() ?? 1,
+              'unitPrice': (e['unitPrice'] as num?)?.toDouble() ?? 0.0,
+              'total': (e['total'] as num?)?.toDouble() ?? 0.0,
+              'type': e['type'] as String? ?? 'expense',
+            })
+        .toList();
   }
 }

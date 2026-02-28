@@ -229,6 +229,7 @@ class _ReelGenerationScreenState extends State<ReelGenerationScreen> {
 						),
 					),
 					const SizedBox(height: 16),
+					if (hasSecondReel)
 					Padding(
 						padding: const EdgeInsets.symmetric(horizontal: 24),
 						child: Container(

@@ -34,9 +34,9 @@ class BackgroundReelService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final reelsBytes = await _aiService.generateReels(images, foodAnalysis);
+      final tempReelPaths = await _aiService.generateReels(images, foodAnalysis);
 
-      if (reelsBytes.isNotEmpty) {
+      if (tempReelPaths.isNotEmpty) {
         final appDir = await getApplicationDocumentsDirectory();
         final reelsDir = Directory(path.join(appDir.path, 'reels'));
         if (!await reelsDir.exists()) {
@@ -44,14 +44,14 @@ class BackgroundReelService extends ChangeNotifier {
         }
 
         List<String> reelPaths = [];
-        for (int i = 0; i < reelsBytes.length; i++) {
-          final reelPath = path.join(
+        for (int i = 0; i < tempReelPaths.length; i++) {
+          final destPath = path.join(
             reelsDir.path,
             'reel_${genId}_${DateTime.now().millisecondsSinceEpoch}_$i.mp4',
           );
-          final reelFile = File(reelPath);
-          await reelFile.writeAsBytes(reelsBytes[i]);
-          reelPaths.add(reelPath);
+          // Veo already saved to a temp file — just move/copy it to permanent storage
+          await File(tempReelPaths[i]).copy(destPath);
+          reelPaths.add(destPath);
         }
 
         final updatedGeneration = generation.copyWith(

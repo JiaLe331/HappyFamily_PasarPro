@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/kira_kira_service.dart';
 
@@ -20,15 +23,19 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
     with TickerProviderStateMixin {
   // ── Services ──────────────────────────────────────────────────────────────
   final KiraKiraService _service = KiraKiraService();
-  final SpeechToText _speech = SpeechToText();
+  final AudioRecorder _recorder = AudioRecorder();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  bool _speechAvailable = false;
   bool _isListening = false;
   bool _isProcessing = false;
+  bool _isScanningReceipt = false;
+  String? _recordingPath;
 
   String _transcript = '';
   String _statusMessage = 'Hold & speak your daily summary';
+
+  // Date filter — defaults to today
+  DateTime _selectedDate = DateTime.now();
 
   List<LedgerEntry> _entries = [];
   LedgerSummary _summary = const LedgerSummary(
@@ -46,7 +53,6 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
   void initState() {
     super.initState();
     _initPulse();
-    _initSpeech();
     _loadTodayData();
   }
 
@@ -61,40 +67,9 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
     );
   }
 
-  Future<void> _initSpeech() async {
-    try {
-      _speechAvailable = await _speech.initialize(
-        onError: (e) {
-          if (mounted) {
-            setState(() {
-              _isListening = false;
-              _statusMessage = 'Microphone error: ${e.errorMsg}';
-            });
-          }
-        },
-        onStatus: (status) {
-          if (status == 'done' || status == 'notListening') {
-            if (mounted && _isListening) {
-              setState(() => _isListening = false);
-            }
-          }
-        },
-      );
-    } catch (_) {
-      _speechAvailable = false;
-    }
-
-    if (!_speechAvailable && mounted) {
-      _showSnack(
-        'Microphone permission denied. Please allow microphone access.',
-        isError: true,
-      );
-    }
-  }
-
   Future<void> _loadTodayData() async {
     try {
-      final entries = await _service.fetchTodayEntries();
+      final entries = await _service.fetchEntriesForDate(_selectedDate);
       if (mounted) {
         setState(() {
           _entries = entries;
@@ -102,69 +77,278 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
         });
       }
     } catch (e) {
-      debugPrint('KiraKira: failed to load today data: $e');
+      debugPrint('KiraKira: failed to load data: $e');
+    }
+  }
+
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: AppColors.onSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+      _loadTodayData();
+    }
+  }
+
+  // ── Delete Entry ──────────────────────────────────────────────────────────
+
+  Future<void> _deleteEntry(LedgerEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Record',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        content: Text(
+          'Are you sure you want to delete this entry?\n\n"${entry.rawTranscript.length > 60 ? '${entry.rawTranscript.substring(0, 60)}…' : entry.rawTranscript}"',
+          style: GoogleFonts.inter(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: GoogleFonts.poppins(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete',
+                style: GoogleFonts.poppins(
+                    color: AppColors.error, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _service.deleteEntry(entry.id);
+        setState(() {
+          _entries.removeWhere((e) => e.id == entry.id);
+          _summary = LedgerSummary.fromEntries(_entries);
+        });
+        _showSnack('Record deleted');
+      } catch (e) {
+        _showSnack('Failed to delete', isError: true);
+      }
+    }
+  }
+
+  // ── Snap Receipt (OCR) ────────────────────────────────────────────────────
+
+  Future<void> _snapReceipt() async {
+    // Show bottom sheet to choose camera or gallery
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Snap Receipt 📸',
+                  style: GoogleFonts.poppins(
+                      fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('Take a photo or pick from gallery',
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: AppColors.onSurfaceVariant)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SourceButton(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'Camera',
+                      onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SourceButton(
+                      icon: Icons.photo_library_rounded,
+                      label: 'Gallery',
+                      onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null) return;
+
+    setState(() {
+      _isScanningReceipt = true;
+      _statusMessage = 'Scanning receipt with Gemini AI…';
+    });
+
+    try {
+      final result = await _service.parseReceiptImage(File(picked.path));
+
+      final transcript = result['transcript'] as String;
+      setState(() => _transcript = '📸 $transcript');
+
+      // Save to Firestore
+      final entry = await _service.saveEntry(
+        expense: result['expense'] as double,
+        revenue: result['revenue'] as double,
+        profit: result['profit'] as double,
+        rawTranscript: '📸 $transcript',
+      );
+
+      setState(() {
+        _entries = [entry, ..._entries];
+        _summary = LedgerSummary.fromEntries(_entries);
+        _statusMessage = 'Receipt scanned! ✅';
+      });
+
+      _showSnack('Receipt processed! 🧾');
+    } catch (e) {
+      debugPrint('Receipt OCR error: $e');
+      _showSnack('Failed to scan receipt. Try again.', isError: true);
+      setState(() => _statusMessage = 'Hold & speak your daily summary');
+    } finally {
+      if (mounted) setState(() => _isScanningReceipt = false);
     }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    _speech.stop();
+    _recorder.dispose();
     super.dispose();
   }
 
-  // ── Speech ────────────────────────────────────────────────────────────────
+  // ── Recording (Gemini-powered STT) ────────────────────────────────────────
 
-  void _startListening() {
-    if (!_speechAvailable) {
-      _showSnack(
-        'Microphone not available. Please check permissions.',
-        isError: true,
-      );
-      return;
-    }
+  Future<void> _startListening() async {
     if (_isListening || _isProcessing) return;
 
-    setState(() {
-      _isListening = true;
-      _transcript = '';
-      _statusMessage = 'Listening…';
-    });
+    // Check microphone permission
+    final hasPermission = await _recorder.hasPermission();
+    if (!hasPermission) {
+      _showSnack('Microphone permission denied. Please allow in Settings.',
+          isError: true);
+      return;
+    }
 
-    _speech.listen(
-      onResult: (result) {
-        if (mounted) {
-          setState(() => _transcript = result.recognizedWords);
-        }
-      },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 4),
-      localeId: 'en_US',
-      listenOptions: SpeechListenOptions(
-        cancelOnError: true,
-        partialResults: true,
+    // Build a unique file path in the app's temp directory
+    final dir = await getTemporaryDirectory();
+    _recordingPath =
+        '${dir.path}/kira_kira_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc, // AAC-LC → .m4a, excellent quality
+        bitRate: 128000,
+        sampleRate: 16000, // 16 kHz — optimal for speech recognition
+        numChannels: 1,   // Mono — speech doesn't need stereo
       ),
+      path: _recordingPath!,
     );
+
+    if (mounted) {
+      setState(() {
+        _isListening = true;
+        _transcript = '';
+        _statusMessage = 'Listening… (Gemini AI)';
+      });
+    }
   }
 
   Future<void> _stopListeningAndProcess() async {
     if (!_isListening) return;
 
-    await _speech.stop();
-    setState(() {
-      _isListening = false;
-      _statusMessage = 'Processing…';
-    });
+    final path = await _recorder.stop();
+    if (mounted) {
+      setState(() {
+        _isListening = false;
+        _statusMessage = 'Transcribing with Gemini AI…';
+        _isProcessing = true;
+      });
+    }
 
-    final text = _transcript.trim();
-    if (text.isEmpty) {
-      setState(() => _statusMessage = 'Could not hear anything. Try again.');
-      _showSnack('Could not understand audio. Please try again.',
-          isError: true);
+    if (path == null) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Recording failed. Try again.';
+        });
+        _showSnack('Recording failed. Please try again.', isError: true);
+      }
       return;
     }
 
-    await _processTranscript(text);
+    try {
+      // Stage 1: Gemini multimodal → accurate transcript
+      final text = await _service.transcribeAudio(File(path));
+
+      if (text.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _statusMessage = 'Could not hear anything. Try again.';
+          });
+          _showSnack('Could not understand audio. Please try again.',
+              isError: true);
+        }
+        return;
+      }
+
+      if (mounted) setState(() => _transcript = text);
+
+      // Stage 2: Parse transcript → financial figures
+      await _processTranscript(text);
+    } catch (e) {
+      debugPrint('KiraKira transcription error: $e');
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Hold & speak your daily summary';
+        });
+        _showSnack('Transcription failed. Please try again.', isError: true);
+      }
+    } finally {
+      // Clean up the temp audio file
+      try {
+        final f = File(path);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
   }
 
   Future<void> _processTranscript(String text) async {
@@ -284,6 +468,16 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
       ),
       actions: [
         IconButton(
+          icon: const Icon(Icons.receipt_long_rounded, color: Colors.white),
+          onPressed: _isScanningReceipt ? null : _snapReceipt,
+          tooltip: 'Snap Receipt',
+        ),
+        IconButton(
+          icon: const Icon(Icons.calendar_today_rounded, color: Colors.white),
+          onPressed: _pickDate,
+          tooltip: 'Pick Date',
+        ),
+        IconButton(
           icon: const Icon(Icons.refresh_rounded, color: Colors.white),
           onPressed: _loadTodayData,
           tooltip: 'Refresh',
@@ -351,7 +545,7 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
                     color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Today\'s Summary',
+                  _isToday ? 'Today\'s Summary' : '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -633,6 +827,37 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
                 fontStyle: FontStyle.italic,
               ),
             ),
+            const SizedBox(height: 16),
+            // ── Snap Receipt inline button ──
+            OutlinedButton.icon(
+              onPressed: _isScanningReceipt ? null : _snapReceipt,
+              icon: _isScanningReceipt
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : Icon(Icons.receipt_long_rounded,
+                      color: AppColors.primary, size: 18),
+              label: Text(
+                _isScanningReceipt ? 'Scanning...' : 'Or snap a receipt',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.primary,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+            ),
           ],
         ),
       ),
@@ -705,8 +930,54 @@ class _KiraKiraScreenState extends State<KiraKiraScreen>
             ),
           ),
         ),
-        ...(_entries.take(5).map((e) => _EntryTile(entry: e))),
+        ...(_entries.take(10).map((e) => Dismissible(
+          key: Key(e.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: AppColors.error,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.delete_rounded, color: Colors.white),
+          ),
+          confirmDismiss: (_) async {
+            await _deleteEntry(e);
+            return false; // we handle removal in _deleteEntry
+          },
+          child: GestureDetector(
+            onTap: () => _showEntryDetail(e),
+            child: _EntryTile(entry: e),
+          ),
+        ))),
       ],
+    );
+  }
+
+  // ── Entry Detail Bottom Sheet ──────────────────────────────────────────────
+
+  Future<void> _showEntryDetail(LedgerEntry entry) async {
+    final timeStr =
+        '${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${entry.timestamp.day}/${entry.timestamp.month}/${entry.timestamp.year}';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return _EntryDetailSheet(
+          entry: entry,
+          timeStr: timeStr,
+          dateStr: dateStr,
+          service: _service,
+        );
+      },
     );
   }
 }
@@ -922,6 +1193,382 @@ class _MiniTag extends StatelessWidget {
           fontWeight: FontWeight.w500,
         ),
       ),
+    );
+  }
+}
+
+/// Button used in the receipt image source picker bottom sheet.
+class _SourceButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SourceButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Column(
+            children: [
+              Icon(icon, color: AppColors.primary, size: 32),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that shows an itemized breakdown for a ledger entry.
+class _EntryDetailSheet extends StatefulWidget {
+  final LedgerEntry entry;
+  final String timeStr;
+  final String dateStr;
+  final KiraKiraService service;
+
+  const _EntryDetailSheet({
+    required this.entry,
+    required this.timeStr,
+    required this.dateStr,
+    required this.service,
+  });
+
+  @override
+  State<_EntryDetailSheet> createState() => _EntryDetailSheetState();
+}
+
+class _EntryDetailSheetState extends State<_EntryDetailSheet> {
+  bool _loading = true;
+  List<Map<String, dynamic>> _items = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBreakdown();
+  }
+
+  Future<void> _loadBreakdown() async {
+    try {
+      final items =
+          await widget.service.getItemizedBreakdown(widget.entry.rawTranscript);
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Breakdown error: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Could not load details';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isProfit = widget.entry.profit >= 0;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+            children: [
+              // ── Handle ──
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // ── Compact Header ──
+              Row(
+                children: [
+                  Icon(
+                    widget.entry.rawTranscript.startsWith('📸')
+                        ? Icons.receipt_long_rounded
+                        : Icons.record_voice_over_rounded,
+                    color: AppColors.accent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${widget.dateStr}  •  ${widget.timeStr}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${isProfit ? '+' : ''}RM${widget.entry.profit.toStringAsFixed(2)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isProfit ? AppColors.success : AppColors.error,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 30),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(strokeWidth: 2),
+                        SizedBox(height: 12),
+                        Text('Analysing with Gemini AI…'),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(_error!,
+                        style: GoogleFonts.poppins(color: AppColors.error)),
+                  ),
+                )
+              else ...[
+                // ── Table Header ──
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(12)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                          flex: 3,
+                          child: Text('Item',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurfaceVariant))),
+                      Expanded(
+                          child: Text('Qty',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurfaceVariant))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Unit (RM)',
+                              textAlign: TextAlign.right,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurfaceVariant))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Total (RM)',
+                              textAlign: TextAlign.right,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurfaceVariant))),
+                    ],
+                  ),
+                ),
+
+                // ── Table Rows ──
+                ..._items.asMap().entries.map((mapEntry) {
+                  final i = mapEntry.key;
+                  final item = mapEntry.value;
+                  final isExpense = item['type'] == 'expense';
+                  final rowColor = isExpense
+                      ? AppColors.error.withValues(alpha: 0.04)
+                      : AppColors.success.withValues(alpha: 0.04);
+                  final textColor =
+                      isExpense ? AppColors.error : AppColors.success;
+                  final isLast = i == _items.length - 1;
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: rowColor,
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : BorderSide(
+                                color:
+                                    AppColors.outline.withValues(alpha: 0.2)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Row(
+                            children: [
+                              Icon(
+                                isExpense
+                                    ? Icons.arrow_downward_rounded
+                                    : Icons.arrow_upward_rounded,
+                                color: textColor,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  item['item'] as String,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: AppColors.onSurface,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '${item['qty']}',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            (item['unitPrice'] as double).toStringAsFixed(2),
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${isExpense ? '-' : '+'}${(item['total'] as double).toStringAsFixed(2)}',
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                // ── Totals ──
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                    borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(12)),
+                    border: Border(
+                      top: BorderSide(
+                          color: AppColors.outline.withValues(alpha: 0.3)),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      _totalRow('Revenue', widget.entry.revenue,
+                          AppColors.success),
+                      const SizedBox(height: 4),
+                      _totalRow(
+                          'Expense', widget.entry.expense, AppColors.error),
+                      const Divider(height: 12),
+                      _totalRow(
+                        'Net Profit',
+                        widget.entry.profit,
+                        isProfit ? AppColors.success : AppColors.error,
+                        bold: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _totalRow(String label, double value, Color color,
+      {bool bold = false}) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            color: AppColors.onSurface,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          'RM${value.toStringAsFixed(2)}',
+          style: GoogleFonts.poppins(
+            fontSize: bold ? 14 : 12,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

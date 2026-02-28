@@ -1,94 +1,108 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AiService — fully powered by Google AI Studio (generativelanguage.googleapis.com)
+//
+// Previously used Vertex AI (projects/locations/publishers URLs) which required
+// PROJECT_ID, REGION, and BASE_URL env vars that were not set — causing the
+// "No host specified in URI" crash.
+//
+// Now uses GEMINI_API_KEY (already in .env) with the simple AI Studio REST API,
+// identical to how KiraKiraService works.
+// ─────────────────────────────────────────────────────────────────────────────
+
 class AiService {
+  static const String _geminiHost = 'generativelanguage.googleapis.com';
+  // gemini-2.5-flash: supports multimodal input (text + image) and is fast
+  static const String _geminiModel = 'gemini-2.5-flash';
+  // gemini-2.5-flash-preview-image-generation: supports native image OUTPUT (responseModalities)
+  static const String _imageGenModel = 'gemini-2.5-flash-image';
+
   late final String _apiKey;
-  late final String _projectId;
-  late final String _location;
-  late final String _baseUrl;
-  static const String _veoModelId = 'veo-3.1-fast-generate-preview';
-  
+
   AiService() {
-    _apiKey = dotenv.env['VERTEX_API_KEY'] ?? '';
-    _projectId = dotenv.env['PROJECT_ID'] ?? '';
-    _location = dotenv.env['REGION'] ?? '';
-    _baseUrl = dotenv.env['BASE_URL'] ?? '';
-    
+    _apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
     if (_apiKey.isEmpty) {
-      throw Exception('VERTEX_API_KEY not found in .env file');
+      throw Exception('GEMINI_API_KEY not found in .env file');
     }
   }
-  
-  /// Helper method to encode image to base64
-  String _encodeImage(Uint8List imageBytes) {
-    return base64Encode(imageBytes);
-  }
-  
-  /// Call Vertex AI generative API
-  Future<String> _callVertexAI(
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Core HTTP helper — AI Studio REST API
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Calls the Gemini AI Studio generateContent endpoint.
+  ///
+  /// [model]      — model ID (e.g. 'gemini-2.5-flash')
+  /// [prompt]     — text prompt
+  /// [imageBytes] — optional image bytes for multimodal requests
+  /// [mimeType]   — MIME type of the image (default: image/jpeg)
+  /// [responseModalities] — e.g. ['TEXT', 'IMAGE'] for image-generation models
+  Future<Map<String, dynamic>> _callGemini(
     String model,
-    String prompt,
-    Uint8List? imageBytes, {
+    String prompt, {
+    Uint8List? imageBytes,
     String mimeType = 'image/jpeg',
+    List<String> responseModalities = const ['TEXT'],
   }) async {
     final url = Uri(
       scheme: 'https',
-      host: _baseUrl,
-      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$model:generateContent',
+      host: _geminiHost,
+      path: '/v1beta/models/$model:generateContent',
       queryParameters: {'key': _apiKey},
     );
 
-    final requestBody = {
-      'contents': [
+    final parts = <Map<String, dynamic>>[
+      {'text': prompt},
+      if (imageBytes != null)
         {
-          'role': 'user',
-          'parts': [
-            {'text': prompt},
-            if (imageBytes != null)
-              {
-                'inline_data': {
-                  'mime_type': mimeType,
-                  'data': _encodeImage(imageBytes),
-                }
-              }
-          ],
-        }
+          'inline_data': {
+            'mime_type': mimeType,
+            'data': base64Encode(imageBytes),
+          }
+        },
+    ];
+
+    final body = jsonEncode({
+      'contents': [
+        {'role': 'user', 'parts': parts}
       ],
       'generationConfig': {
         'temperature': 1.0,
         'topP': 0.95,
+        'responseModalities': responseModalities,
       },
-    };
+    });
 
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(requestBody),
+      body: body,
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Vertex AI API error: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Gemini API error ${response.statusCode}: ${response.body}');
     }
 
-    final responseData = jsonDecode(response.body);
-    final content = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'] as String?;
-    
-    if (content == null) {
-      throw Exception('No text content in Vertex AI response');
-    }
-
-    return content;
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
-  
-  /// Analyze food image to identify dish name, cuisine, and ingredients
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Food Analysis
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Analyzes a food image and returns dish name, cuisine, ingredients, and description.
   Future<FoodAnalysis> analyzeFood(File imageFile) async {
     try {
       final imageBytes = await imageFile.readAsBytes();
-      
-      final prompt = '''
+
+      const prompt = '''
 Analyze this food image and provide:
 1. Food name (in English)
 2. Cuisine type (e.g., Malaysian, Chinese, Indian)
@@ -103,152 +117,128 @@ Respond in JSON format:
   "description": "..."
 }
 ''';
-      
-      final text = await _callVertexAI('gemini-2.5-flash', prompt, imageBytes);
-      
-      // Extract JSON from response (handle markdown code blocks)
+
+      final data = await _callGemini(
+        _geminiModel,
+        prompt,
+        imageBytes: imageBytes,
+      );
+
+      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text']
+          as String?;
+      if (text == null || text.isEmpty) {
+        throw Exception('Empty response from Gemini');
+      }
+
       final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
       if (jsonMatch == null) {
         throw Exception('Failed to parse food analysis response');
       }
-      
-      final jsonData = jsonDecode(jsonMatch.group(0)!);
-      return FoodAnalysis.fromJson(jsonData);
-      
+
+      return FoodAnalysis.fromJson(
+          jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>);
     } catch (e) {
       throw Exception('Food analysis failed: $e');
     }
   }
-  
-  /// Enhance food image using Gemini 2.5 Flash Image (Nano Banana)
-  /// Returns a list of enhanced image variations (generates 3 in one call)
-  Future<List<Uint8List>> enhanceImage(File imageFile, {String? customPrompt}) async {
-    try 
-    {
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Image Enhancement (Nano Banana — gemini-2.0-flash-exp with image output)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Enhances a food photo by generating 3 styled variations.
+  Future<List<Uint8List>> enhanceImage(File imageFile,
+      {String? customPrompt}) async {
+    try {
       final imageBytes = await imageFile.readAsBytes();
-      
-      final prompt = customPrompt ?? 
-'''
-Transform this image and create 3 separate images based on each instruction:
-Image 1 (Clean and Bright Style):
-- Clean background with white/light surface
-- Bright, natural lighting
-- Vibrant, appetizing colors
 
-Image 2 (Warm and Cozy Style):
-- Wooden table background
-- Warm, soft lighting with golden tones
-- Natural, home-cooked feel
-        
-Image 3 (Modern and Minimalist Style):
-- Dark background for contrast
-- Dramatic lighting highlighting the food
-- Professional restaurant presentation
+      final prompt = customPrompt ??
+          '''
+Transform this food photo into 3 beautiful styled versions for social media:
 
-All 3 images must:
-- Keep authentic Malaysian food appearance
-- Maintain original food composition and angle (make sure the entire dish is visible)
-- Make suitable for social media posting
+Style 1 — Clean & Bright:
+- Crisp white or light background
+- Bright, natural daylight lighting
+- Vibrant, appetizing colours
+
+Style 2 — Warm & Cosy:
+- Rustic wooden table surface
+- Warm golden-hour lighting
+- Home-cooked, inviting feel
+
+Style 3 — Modern & Dramatic:
+- Dark moody background for contrast
+- Dramatic spotlighting on the food
+- Fine-dining restaurant presentation
+
+All versions must:
+- Keep the authentic Malaysian food appearance
+- Maintain original composition (full dish visible)
+- Look stunning for Instagram / TikTok
 ''';
 
-      final enhancedImages = await _callNanoBanana(imageBytes, prompt);
-      return enhancedImages;
-    }
-    catch (e)
-    {
+      return await _callNanoBanana(imageBytes, prompt);
+    } catch (e) {
       throw Exception('Image enhancement failed: $e');
     }
   }
 
-  Future<List<Uint8List>> _callNanoBanana(Uint8List imageBytes, String prompt) async
-  {
-    final url = Uri
-    (
-      scheme: 'https',
-      host: _baseUrl,
-      // path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.0-flash-exp:generateContent',
-      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/gemini-2.5-flash-image:generateContent',
-      queryParameters: {'key': _apiKey}
+  Future<List<Uint8List>> _callNanoBanana(
+      Uint8List imageBytes, String prompt) async {
+    final data = await _callGemini(
+      _imageGenModel,
+      prompt,
+      imageBytes: imageBytes,
+      responseModalities: ['TEXT', 'IMAGE'],
     );
-    
-    final requestBody =
-    {
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {'text': prompt},
-            {
-              'inline_data': {
-                'mime_type': 'image/jpeg',
-                'data': _encodeImage(imageBytes),
-              }
-            }
-          ],
-        }
-      ],
-      'generationConfig': {
-        'temperature': 1.0,
-        'topP': 0.95,
-        'responseModalities': ['text','image'],
-        "imageConfig": {
-          "aspectRatio": "4:5",
-        },
-      },
-    };
 
-    print('[Enhancing Image] Sending request...');
+    print('[NanaBanana] Raw response keys: ${data.keys}');
 
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(requestBody),
-    );
-    
-    print('[Enhancing Image] Response status: ${response.statusCode}');
-    print('[Enhancing Image] Response body: ${response.body}');
-    
-    if (response.statusCode != 200) 
-    {
-      print('[Enhancing Image] Error response: ${response.body}');
-      throw Exception('Enhancing Image API error: ${response.statusCode} - ${response.body}');
-    }
-
-    final responseData = jsonDecode(response.body);
-    final candidates = responseData['candidates'] as List?;
-    
+    final candidates = data['candidates'] as List?;
     if (candidates == null || candidates.isEmpty) {
-      throw Exception('No candidates in response');
+      throw Exception('No candidates in image generation response');
     }
-    
-    final List<Uint8List> enhancedImages = [];
-    
+
+    final List<Uint8List> images = [];
+
     for (final candidate in candidates) {
       final parts = candidate?['content']?['parts'] as List?;
-      if (parts == null || parts.isEmpty) continue;
-      
+      if (parts == null) continue;
       for (final part in parts) {
-        if (part is Map && part.containsKey('inlineData')) {
-          final inlineData = part['inlineData'] as Map;
-          final base64Image = inlineData['data'] as String?;
-          
-          if (base64Image != null) {
-            enhancedImages.add(base64Decode(base64Image));
-          }
+        if (part is! Map) continue;
+        // AI Studio returns inlineData (camelCase)
+        final inlineData =
+            (part['inlineData'] ?? part['inline_data']) as Map?;
+        if (inlineData == null) continue;
+        final b64 = inlineData['data'] as String?;
+        if (b64 != null && b64.isNotEmpty) {
+          images.add(base64Decode(b64));
         }
       }
     }
 
-    print('[Enhancing Image] Extracted ${enhancedImages.length} images.');
-    if (enhancedImages.isEmpty) {
-      throw Exception('No image data in response');
+    print('[NanaBanana] Extracted ${images.length} images.');
+
+    if (images.isEmpty) {
+      // The model returned text but no images — surface a meaningful error
+      final textParts = (candidates[0]?['content']?['parts'] as List? ?? [])
+          .where((p) => p is Map && p['text'] != null)
+          .map((p) => p['text'] as String)
+          .join('\n');
+      throw Exception(
+          'Image generation returned no images. Model said: $textParts');
     }
-    
-    return enhancedImages;
+
+    return images;
   }
-  
-  /// Generate multi-language captions with hashtags
-  Future<CaptionSet> generateCaptions(String foodName, String description) async {
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Caption Generation
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Generates English, Malay, and Mandarin captions with hashtags.
+  Future<CaptionSet> generateCaptions(
+      String foodName, String description) async {
     try {
       final prompt = '''
 Create engaging social media captions for this Malaysian food: $foodName
@@ -270,238 +260,227 @@ Respond in JSON format:
   "hashtags": ["#NasiLemak", "#MalaysianFood", ...]
 }
 ''';
-      
-      final text = await _callVertexAI('gemini-2.5-flash', prompt, null);
-      
-      // Extract JSON from response
+
+      final data = await _callGemini(_geminiModel, prompt);
+      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text']
+          as String?;
+      if (text == null) throw Exception('Empty caption response');
+
       final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
-      if (jsonMatch == null) {
-        throw Exception('Failed to parse caption response');
-      }
-      
-      final jsonData = jsonDecode(jsonMatch.group(0)!);
-      return CaptionSet.fromJson(jsonData);
-      
+      if (jsonMatch == null) throw Exception('Failed to parse caption response');
+
+      return CaptionSet.fromJson(
+          jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>);
     } catch (e) {
       throw Exception('Caption generation failed: $e');
     }
   }
 
-  /// Generate a plain-text caption from a freeform prompt (no image needed)
+  /// Generates a plain-text caption from a freeform prompt (no image needed).
   Future<String> generateCaption(String prompt) async {
     try {
-      return await _callVertexAI('gemini-2.5-flash', prompt, null);
+      final data = await _callGemini(_geminiModel, prompt);
+      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text']
+          as String?;
+      if (text == null) throw Exception('Empty caption response');
+      return text;
     } catch (e) {
       throw Exception('Caption generation failed: $e');
     }
   }
 
-  /// Generate a short video reel using up to 3 reference images
-  Future<List<Uint8List>> generateReels(List<File> referenceImageFiles, FoodAnalysis foodAnalysis) async
-  {
-    try
-    {
-      final imageBytesList = <Uint8List>[];
-      for (final imageFile in referenceImageFiles) {
-        final bytes = await imageFile.readAsBytes();
-        imageBytesList.add(bytes);
-      }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Reel Generation — Veo 3.1 via Google AI Studio REST API
+  // ─────────────────────────────────────────────────────────────────────────
 
-      final prompt = 
-'''
-Create a short video reel for this Malaysian food
-- Food name: ${foodAnalysis.foodName}
-- Cuisine: ${foodAnalysis.cuisine}
-- Description: ${foodAnalysis.description}
-- Ingredients: ${foodAnalysis.ingredients.join(', ')}
+  static const String _veoModel = 'veo-3.1-generate-preview';
 
-Use the reference images to create an engaging and appetizing video to showcase and promote the food on social media.
-''';
+  /// Generates short promotional video reels using Veo 3.1 via AI Studio.
+  ///
+  /// REST API flow (from official docs):
+  ///   1. POST :predictLongRunning  → returns a long-running operation name
+  ///   2. GET  {operationName}      → poll every 10 s until done == true
+  ///   3. Extract video URI from response.generateVideoResponse.generatedSamples
+  ///   4. Download video bytes      → save to temp .mp4 file
+  Future<List<String>> generateReels(
+      List<File> referenceImageFiles, FoodAnalysis foodAnalysis) async {
+    // ── 1. Build prompt with narration cues ──────────────────────────────
+    // Veo 3.1 natively generates audio — the docs use single quotes for
+    // dialogue and explicit speaker/sound descriptions.
+    final ingredientList = foodAnalysis.ingredients.take(3).join(', ');
+    final prompt =
+        "A cinematic food promotional video. "
+        "Close-up shot of ${foodAnalysis.foodName}, a ${foodAnalysis.cuisine} dish, "
+        "steam rising from the plate, warm golden lighting. "
+        "A professional male narrator with a deep, warm voice speaks clearly: "
+        "'Introducing ${foodAnalysis.foodName}. A beloved ${foodAnalysis.cuisine} classic, "
+        "crafted with $ingredientList.' "
+        "Sizzling sounds, gentle kitchen ambience. "
+        "The camera slowly pans across the dish. "
+        "The narrator continues speaking: '${foodAnalysis.description}' "
+        "Dramatic hero shot of the complete dish, beautifully plated. "
+        "The narrator says with passion: 'Taste the tradition.' "
+        "9:16 portrait, shallow depth of field, cinematic food photography.";
 
-      final generatedReels = await _callVeo(imageBytesList, prompt);
-      return generatedReels;
-    }
-    catch (e)
-    {
-      throw Exception('Reels generation failed: $e');
-    }
-  }
-
-  Future<List<Uint8List>> _callVeo(List<Uint8List> imageBytesList, String prompt) async
-  {
-    final url = Uri
-    (
-      scheme: 'https',
-      host: _baseUrl,
-      path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$_veoModelId:predictLongRunning',
-      queryParameters: {'key': _apiKey}
-    );
-    
-    final requestBody =
-    {
-      "instances": [
-        {
-          "prompt": prompt,
-          // The following fields can be repeated for up to three total images.
-          "referenceImages": [
-            for (final imageBytes in imageBytesList)
-            {
-              "image": {
-                "bytesBase64Encoded": base64Encode(imageBytes),
-                "mimeType": "image/jpeg"
-              },
-              "referenceType": "asset"
-            }
-          ]
-        }
-      ],
-      "parameters": {
-        "aspectRatio": "9:16",
-        "durationSeconds": 8, // can let user choose
-        "sampleCount": 2,
-        "resolution": "720p", // can let user choose
-      }
+    // Auth header used by the REST API (NOT query param)
+    final authHeaders = {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': _apiKey,
     };
 
-    print('[Generating Reels] Sending request...');
+    // ── 2. Start long-running generation ──────────────────────────────────
+    // Endpoint: POST /v1beta/models/{model}:predictLongRunning
+    final startUrl = Uri.parse(
+        'https://$_geminiHost/v1beta/models/$_veoModel:predictLongRunning');
 
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(requestBody),
+    // Request body uses "instances" + "parameters" format (NOT prompt/generationConfig)
+    final startBody = jsonEncode({
+      'instances': [
+        {
+          'prompt': prompt,
+        }
+      ],
+      'parameters': {
+        'aspectRatio': '9:16',
+      },
+    });
+
+    debugPrint('[Veo] Starting video generation...');
+    final startResponse = await http.post(
+      startUrl,
+      headers: authHeaders,
+      body: startBody,
     );
-    
-    print('[Generating Reels] Response status: ${response.statusCode}');
-    print('[Generating Reels] Response body: ${response.body}');
-    
-    if (response.statusCode != 200) 
-    {
-      print('[Generating Reels] Error response: ${response.body}');
-      throw Exception('Generating Reels API error: ${response.statusCode} - ${response.body}');
+
+    if (startResponse.statusCode != 200) {
+      throw Exception(
+          'Veo predictLongRunning error ${startResponse.statusCode}: ${startResponse.body}');
     }
 
-    final responseData = jsonDecode(response.body);
-    final operationName = responseData['name'] as String?;
-    
+    final startData =
+        jsonDecode(startResponse.body) as Map<String, dynamic>;
+    final operationName = startData['name'] as String?;
     if (operationName == null) {
-      throw Exception('No operation name in response');
+      throw Exception(
+          'Veo: no operation name in response: ${startResponse.body}');
     }
+    debugPrint('[Veo] Operation started: $operationName');
 
-    print('[Generating Reels] Operation started: $operationName');
+    // ── 3. Poll until done ────────────────────────────────────────────────
+    // Max wait: 6 minutes (36 polls × 10 s)
+    const maxPolls = 36;
+    const pollIntervalSeconds = 10;
+    Map<String, dynamic>? completedData;
 
-    // Poll the operation until it completes
-    final result = await _pollLongRunningOperation(operationName);
-    
-    final List<Uint8List> generatedReels = [];
-    
-    // Extract videos from the operation result
-    final responsePayload = result['response'] ?? result['result'] ?? result['predictResponse'] ?? result;
+    for (int i = 0; i < maxPolls; i++) {
+      await Future<void>.delayed(
+          const Duration(seconds: pollIntervalSeconds));
 
-    final predictions = responsePayload['predictions'] as List?;
-    if (predictions != null) {
-      for (final prediction in predictions) {
-        if (prediction is Map<String, dynamic>) {
-          final base64Video = prediction['bytesBase64Encoded'] as String?;
-          if (base64Video != null) {
-            generatedReels.add(base64Decode(base64Video));
-          }
-        }
-      }
-    }
+      // GET /v1beta/{operationName}
+      final pollUrl =
+          Uri.parse('https://$_geminiHost/v1beta/$operationName');
 
-    if (generatedReels.isEmpty) {
-      final videosList = responsePayload['videos'] as List?;
-      if (videosList != null) {
-        for (final video in videosList) {
-          if (video is Map<String, dynamic>) {
-            final base64Video = video['bytesBase64Encoded'] as String?;
-            if (base64Video != null) {
-              generatedReels.add(base64Decode(base64Video));
-            }
-          }
-        }
-      }
-    }
-
-    print('[Generating Reels] Extracted ${generatedReels.length} videos.');
-    if (generatedReels.isEmpty) {
-      throw Exception('No video data in operation result');
-    }
-    
-    return generatedReels;
-  }
-
-  Future<Map<String, dynamic>> _pollLongRunningOperation(String operationName) async {
-    // 2 Minutes 30 Seconds
-    const maxAttempts = 5; 
-    const delaySeconds = 30;
-
-    for (int attempt = 0; attempt < maxAttempts; attempt++) {
-      final url = Uri(
-        scheme: 'https',
-        host: _baseUrl,
-        path: '/v1/projects/$_projectId/locations/$_location/publishers/google/models/$_veoModelId:fetchPredictOperation',
-        queryParameters: {'key': _apiKey},
+      debugPrint('[Veo] Polling attempt ${i + 1}/$maxPolls...');
+      final pollResponse = await http.get(
+        pollUrl,
+        headers: {'x-goog-api-key': _apiKey},
       );
 
-      print('[Polling Operation] Checking: ${url.toString()}');
-
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'operationName': operationName}),
-      );
-
-      print('[Polling Operation] Attempt ${attempt + 1}/$maxAttempts - Status: ${response.statusCode}');
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to get operation status: ${response.statusCode} - ${response.body}');
+      if (pollResponse.statusCode != 200) {
+        throw Exception(
+            'Veo poll error ${pollResponse.statusCode}: ${pollResponse.body}');
       }
 
-      final operationData = jsonDecode(response.body) as Map<String, dynamic>;
-      final isDone = operationData['done'] as bool? ?? false;
+      final pollData =
+          jsonDecode(pollResponse.body) as Map<String, dynamic>;
+      final isDone = pollData['done'] as bool? ?? false;
+
+      if (pollData.containsKey('error')) {
+        throw Exception('Veo operation failed: ${pollData['error']}');
+      }
 
       if (isDone) {
-        print('[Polling Operation] Operation completed!');
-        
-        // Check for errors
-        if (operationData.containsKey('error')) {
-          throw Exception('Operation failed: ${operationData['error']}');
-        }
-
-        final payload = operationData['response'] ?? operationData['result'] ?? operationData;
-        if (payload is! Map<String, dynamic>) {
-          throw Exception('No result payload in completed operation');
-        }
-
-        final prettyJson = const JsonEncoder.withIndent('  ').convert(payload);
-        print('[Polling Operation] Result payload:\n$prettyJson');
-
-        return payload;
+        debugPrint('[Veo] Operation completed!');
+        completedData = pollData;
+        break;
       }
-
-      print('[Polling Operation] Operation still running, waiting ${delaySeconds}s...');
-      await Future.delayed(Duration(seconds: delaySeconds));
     }
 
-    throw Exception('Operation timed out after ${maxAttempts * delaySeconds} seconds');
+    if (completedData == null) {
+      throw Exception(
+          'Veo: timed out after ${maxPolls * pollIntervalSeconds} seconds');
+    }
+
+    // ── 4. Extract video URIs ─────────────────────────────────────────────
+    // REST response shape:
+    //   { response: { generateVideoResponse: { generatedSamples: [ { video: { uri } } ] } } }
+    final response = completedData['response'] as Map<String, dynamic>?;
+    final generateVideoResponse =
+        response?['generateVideoResponse'] as Map<String, dynamic>?;
+    final generatedSamples =
+        generateVideoResponse?['generatedSamples'] as List?;
+
+    if (generatedSamples == null || generatedSamples.isEmpty) {
+      throw Exception(
+          'Veo: no videos in completed operation: $completedData');
+    }
+
+    // ── 5. Download each video and save to a temp file ────────────────────
+    final tmpDir = await Directory.systemTemp.createTemp('veo_reels_');
+    final List<String> reelPaths = [];
+
+    for (int i = 0; i < generatedSamples.length; i++) {
+      final sample = generatedSamples[i] as Map<String, dynamic>;
+      final videoMeta = sample['video'] as Map<String, dynamic>?;
+      final videoUri = videoMeta?['uri'] as String?;
+
+      if (videoUri == null) continue;
+
+      debugPrint('[Veo] Downloading video $i from $videoUri');
+
+      // Download with API key in header (following redirects via client)
+      final videoResponse = await http.get(
+        Uri.parse(videoUri),
+        headers: {'x-goog-api-key': _apiKey},
+      );
+
+      if (videoResponse.statusCode != 200) {
+        debugPrint(
+            '[Veo] Download failed for video $i: ${videoResponse.statusCode}');
+        continue;
+      }
+
+      final videoFile = File('${tmpDir.path}/reel_$i.mp4');
+      await videoFile.writeAsBytes(videoResponse.bodyBytes);
+      reelPaths.add(videoFile.path);
+      debugPrint('[Veo] Saved reel $i to ${videoFile.path}');
+    }
+
+    if (reelPaths.isEmpty) {
+      throw Exception('Veo: all video downloads failed');
+    }
+
+    return reelPaths;
   }
 }
 
-/// Data model for food analysis results
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Models
+// ─────────────────────────────────────────────────────────────────────────────
+
 class FoodAnalysis {
   final String foodName;
   final String cuisine;
   final List<String> ingredients;
   final String description;
-  
+
   FoodAnalysis({
     required this.foodName,
     required this.cuisine,
     required this.ingredients,
     required this.description,
   });
-  
+
   factory FoodAnalysis.fromJson(Map<String, dynamic> json) {
     return FoodAnalysis(
       foodName: json['foodName'] as String,
@@ -512,20 +491,19 @@ class FoodAnalysis {
   }
 }
 
-/// Data model for multi-language captions
 class CaptionSet {
   final String english;
   final String malay;
   final String mandarin;
   final List<String> hashtags;
-  
+
   CaptionSet({
     required this.english,
     required this.malay,
     required this.mandarin,
     required this.hashtags,
   });
-  
+
   factory CaptionSet.fromJson(Map<String, dynamic> json) {
     return CaptionSet(
       english: json['english'] as String,
